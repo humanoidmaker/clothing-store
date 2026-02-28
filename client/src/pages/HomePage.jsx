@@ -122,7 +122,14 @@ const HomePage = () => {
         eyebrow="Store"
         title={heading}
         subtitle="Filter by category, size, color and price with a fixed desktop sidebar."
-        actions={<Typography color="text.secondary">{products.length} items</Typography>}
+        actions={
+          <Stack direction="row" spacing={0.7} alignItems="center">
+            {loading && <CircularProgress size={14} />}
+            <Typography color="text.secondary">
+              {loading ? 'Loading items...' : `${products.length} items`}
+            </Typography>
+          </Stack>
+        }
       />
 
       <Box
@@ -243,10 +250,22 @@ const HomePage = () => {
                 </FormControl>
 
                 <Stack direction="row" spacing={0.8}>
-                  <Button variant="contained" onClick={applyFilters} fullWidth>
-                    Apply
+                  <Button
+                    variant="contained"
+                    onClick={applyFilters}
+                    fullWidth
+                    disabled={loading}
+                    startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
+                  >
+                    {loading ? 'Applying...' : 'Apply'}
                   </Button>
-                  <Button variant="outlined" startIcon={<RestartAltOutlinedIcon fontSize="small" />} onClick={resetFilters} fullWidth>
+                  <Button
+                    variant="outlined"
+                    startIcon={<RestartAltOutlinedIcon fontSize="small" />}
+                    onClick={resetFilters}
+                    fullWidth
+                    disabled={loading}
+                  >
                     Reset
                   </Button>
                 </Stack>

@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  CircularProgress,
   Divider,
   FormControl,
   Grid,
@@ -216,7 +217,13 @@ const CheckoutPage = () => {
               type="submit"
               variant="contained"
               sx={{ mt: 1.2 }}
-              startIcon={paymentMethod === 'Razorpay' ? <CreditCardOutlinedIcon /> : <LocalShippingOutlinedIcon />}
+              startIcon={
+                submitting
+                  ? <CircularProgress size={14} color="inherit" />
+                  : paymentMethod === 'Razorpay'
+                    ? <CreditCardOutlinedIcon />
+                    : <LocalShippingOutlinedIcon />
+              }
               disabled={submitting}
             >
               {submitting ? 'Processing...' : paymentMethod === 'Razorpay' ? 'Pay with Razorpay' : 'Place Order'}

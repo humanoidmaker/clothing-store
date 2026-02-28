@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, TextField, Typography } from '@mui/material';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -73,7 +73,7 @@ const RegisterPage = () => {
               type="submit"
               variant="contained"
               size="large"
-              startIcon={<PersonAddAltOutlinedIcon />}
+              startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : <PersonAddAltOutlinedIcon />}
               disabled={submitting}
             >
               {submitting ? 'Creating...' : 'Create Account'}

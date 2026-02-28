@@ -81,6 +81,7 @@ const AdminProductsPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState('');
   const [statusUpdatingId, setStatusUpdatingId] = useState('');
   const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
 
@@ -213,6 +214,7 @@ const AdminProductsPage = () => {
 
     setError('');
     setSuccess('');
+    setDeletingProductId(id);
 
     try {
       await api.delete(`/products/${id}`);
@@ -223,6 +225,8 @@ const AdminProductsPage = () => {
       setSuccess('Product deleted');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to delete product');
+    } finally {
+      setDeletingProductId('');
     }
   };
 
@@ -385,7 +389,7 @@ const AdminProductsPage = () => {
               variant="contained"
               sx={{ mt: 1.2 }}
               disabled={saving}
-              startIcon={<SaveOutlinedIcon />}
+              startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon />}
             >
               {saving ? 'Saving...' : editingProductId ? 'Update Product' : 'Create Product'}
             </Button>
@@ -440,10 +444,15 @@ const AdminProductsPage = () => {
                             variant="outlined"
                             color="error"
                             size="small"
-                            startIcon={<DeleteOutlineOutlinedIcon />}
+                            startIcon={
+                              deletingProductId === product._id
+                                ? <CircularProgress size={14} color="inherit" />
+                                : <DeleteOutlineOutlinedIcon />
+                            }
+                            disabled={deletingProductId === product._id}
                             onClick={() => onDelete(product._id)}
                           >
-                            Delete
+                            {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
                           </Button>
                         </Stack>
                       </TableCell>
@@ -549,6 +558,11 @@ const AdminProductsPage = () => {
                               variant="contained"
                               size="small"
                               disabled={isSameStatus || statusUpdatingId === order._id}
+                              startIcon={
+                                statusUpdatingId === order._id
+                                  ? <CircularProgress size={14} color="inherit" />
+                                  : undefined
+                              }
                               onClick={() => onUpdateOrderStatus(order._id)}
                             >
                               {statusUpdatingId === order._id ? 'Updating...' : 'Update'}
