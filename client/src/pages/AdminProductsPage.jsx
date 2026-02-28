@@ -39,9 +39,13 @@ import { formatINR } from '../utils/currency';
 
 const defaultCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
 const defaultGenderOptions = ['Men', 'Women', 'Unisex'];
-const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
-const maxImageFileSizeBytes = 2 * 1024 * 1024;
-const minImageDimension = 500;
+const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const maxImageFileSizeBytes = 10 * 1024 * 1024;
+const minImageDimension = 200;
+const createVariantId = () =>
+  (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 const initialForm = {
   name: '',
@@ -56,6 +60,7 @@ const initialForm = {
 };
 
 const createEmptyVariant = () => ({
+  id: createVariantId(),
   size: '',
   color: '',
   price: '',
@@ -92,6 +97,7 @@ const parseProductImages = (product) => {
 const parseProductVariants = (product) => {
   if (Array.isArray(product.variants) && product.variants.length > 0) {
     return product.variants.map((variant) => ({
+      id: createVariantId(),
       size: String(variant.size || ''),
       color: String(variant.color || ''),
       price: variant.price ?? '',
@@ -125,7 +131,7 @@ const validateAndReadImage = async (file) => {
   }
 
   if (file.size > maxImageFileSizeBytes) {
-    throw new Error('Each image size must be 2MB or less');
+    throw new Error('Each image size must be 10MB or less');
   }
 
   const dataUrl = await readFileAsDataUrl(file);
@@ -225,17 +231,17 @@ const AdminProductsPage = () => {
     setVariantRows((current) => [...current, createEmptyVariant()]);
   };
 
-  const removeVariantRow = (rowIndex) => {
+  const removeVariantRow = (rowId) => {
     setVariantRows((current) => {
       if (current.length <= 1) return current;
-      return current.filter((_, index) => index !== rowIndex);
+      return current.filter((row) => row.id !== rowId);
     });
   };
 
-  const onVariantChange = (rowIndex, field, value) => {
+  const onVariantChange = (rowId, field, value) => {
     setVariantRows((current) =>
-      current.map((row, index) =>
-        index === rowIndex ? { ...row, [field]: value } : row
+      current.map((row) =>
+        row.id === rowId ? { ...row, [field]: value } : row
       )
     );
   };
@@ -258,7 +264,7 @@ const AdminProductsPage = () => {
     setProductImages((current) => current.filter((_, index) => index !== imageIndex));
   };
 
-  const onAddVariantImages = async (rowIndex, event) => {
+  const onAddVariantImages = async (rowId, event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
     if (files.length === 0) return;
@@ -267,8 +273,10 @@ const AdminProductsPage = () => {
     try {
       const images = await readValidatedImages(files);
       setVariantRows((current) =>
-        current.map((row, index) =>
-          index === rowIndex ? { ...row, images: [...(row.images || []), ...images] } : row
+        current.map((row) =>
+          row.id === rowId
+            ? { ...row, images: [...new Set([...(row.images || []), ...images])] }
+            : row
         )
       );
     } catch (validationError) {
@@ -276,10 +284,10 @@ const AdminProductsPage = () => {
     }
   };
 
-  const removeVariantImage = (rowIndex, imageIndex) => {
+  const removeVariantImage = (rowId, imageIndex) => {
     setVariantRows((current) =>
-      current.map((row, index) =>
-        index === rowIndex
+      current.map((row) =>
+        row.id === rowId
           ? { ...row, images: (row.images || []).filter((_, currentImageIndex) => currentImageIndex !== imageIndex) }
           : row
       )
@@ -577,7 +585,7 @@ const AdminProductsPage = () => {
                     <input hidden multiple type="file" accept="image/png,image/jpeg,image/webp" onChange={onAddProductImages} />
                   </Button>
                   <Typography variant="caption" color="text.secondary">
-                    Allowed: JPG/PNG/WEBP, each {'<='} 2MB, min {minImageDimension}x{minImageDimension}
+                    Allowed: JPG/PNG/WEBP, each {'<='} 10MB, min {minImageDimension}x{minImageDimension}
                   </Typography>
                 </Stack>
                 {productImages.length > 0 && (
@@ -621,7 +629,7 @@ const AdminProductsPage = () => {
                   </Button>
                 </Stack>
                 {variantRows.map((variant, index) => (
-                  <Card key={`variant-${index}`} variant="outlined">
+                  <Card key={variant.id} variant="outlined">
                     <CardContent sx={{ p: 1 }}>
                       <Stack spacing={0.8}>
                         <Box
@@ -637,7 +645,7 @@ const AdminProductsPage = () => {
                               fullWidth
                               label="Size"
                               value={variant.size}
-                              onChange={(event) => onVariantChange(index, 'size', event.target.value)}
+                              onChange={(event) => onVariantChange(variant.id, 'size', event.target.value)}
                             />
                           </Box>
                           <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 3' } }}>
@@ -645,7 +653,7 @@ const AdminProductsPage = () => {
                               fullWidth
                               label="Color"
                               value={variant.color}
-                              onChange={(event) => onVariantChange(index, 'color', event.target.value)}
+                              onChange={(event) => onVariantChange(variant.id, 'color', event.target.value)}
                             />
                           </Box>
                           <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
@@ -655,7 +663,7 @@ const AdminProductsPage = () => {
                               min="0"
                               label="Price"
                               value={variant.price}
-                              onChange={(event) => onVariantChange(index, 'price', event.target.value)}
+                              onChange={(event) => onVariantChange(variant.id, 'price', event.target.value)}
                             />
                           </Box>
                           <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
@@ -665,12 +673,12 @@ const AdminProductsPage = () => {
                               min="0"
                               label="Stock"
                               value={variant.stock}
-                              onChange={(event) => onVariantChange(index, 'stock', event.target.value)}
+                              onChange={(event) => onVariantChange(variant.id, 'stock', event.target.value)}
                             />
                           </Box>
                           <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <IconButton
-                              onClick={() => removeVariantRow(index)}
+                              onClick={() => removeVariantRow(variant.id)}
                               color="error"
                               disabled={variantRows.length === 1}
                             >
@@ -687,7 +695,7 @@ const AdminProductsPage = () => {
                               multiple
                               type="file"
                               accept="image/png,image/jpeg,image/webp"
-                              onChange={(event) => onAddVariantImages(index, event)}
+                              onChange={(event) => onAddVariantImages(variant.id, event)}
                             />
                           </Button>
                           {variant.images.length > 0 && (
@@ -700,17 +708,17 @@ const AdminProductsPage = () => {
                               }}
                             >
                               {variant.images.map((image, imageIndex) => (
-                                <Box key={`variant-${index}-image-${imageIndex}`} sx={{ position: 'relative', minWidth: 0 }}>
+                                <Box key={`variant-${variant.id}-image-${imageIndex}`} sx={{ position: 'relative', minWidth: 0 }}>
                                   <ProductImageViewport
                                     src={image}
-                                    alt={`Variant ${index + 1} ${imageIndex + 1}`}
+                                    alt={`Variant ${variant.size || index + 1} ${imageIndex + 1}`}
                                     aspectRatio="1 / 1"
                                     fit="cover"
                                   />
                                   <IconButton
                                     size="small"
                                     color="error"
-                                    onClick={() => removeVariantImage(index, imageIndex)}
+                                    onClick={() => removeVariantImage(variant.id, imageIndex)}
                                     sx={{ position: 'absolute', top: 2, right: 2, bgcolor: 'background.paper' }}
                                   >
                                     <CloseOutlinedIcon fontSize="small" />

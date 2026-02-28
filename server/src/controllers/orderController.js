@@ -45,13 +45,23 @@ const prepareOrderItems = async (items) => {
 
   const orderItems = [];
   const stockUpdates = [];
+  const productCache = new Map();
   let totalPrice = 0;
 
   for (const item of items) {
-    const product = await Product.findById(item.productId);
+    const productId = String(item.productId || '').trim();
+    if (!productId) {
+      return { error: { status: 400, message: 'Invalid product id in order items' } };
+    }
+
+    let product = productCache.get(productId);
+    if (!product) {
+      product = await Product.findById(productId);
+      productCache.set(productId, product || null);
+    }
 
     if (!product) {
-      return { error: { status: 404, message: `Product not found: ${item.productId}` } };
+      return { error: { status: 404, message: `Product not found: ${productId}` } };
     }
 
     const quantity = Number(item.quantity || 0);
@@ -111,7 +121,7 @@ const prepareOrderItems = async (items) => {
       selectedColor
     });
 
-    stockUpdates.push({ product, quantity, variantIndex });
+    stockUpdates.push({ productId, product, quantity, variantIndex });
     totalPrice += unitPrice * quantity;
   }
 
@@ -119,25 +129,57 @@ const prepareOrderItems = async (items) => {
 };
 
 const deductStock = async (stockUpdates) => {
+  const groupedUpdates = new Map();
+
   for (const update of stockUpdates) {
-    if (Number.isInteger(update.variantIndex) && update.variantIndex >= 0) {
-      const variant = update.product.variants[update.variantIndex];
+    const key = String(update.productId || update.product?._id || '').trim();
+    if (!key) {
+      continue;
+    }
 
-      if (!variant || Number(variant.stock) < update.quantity) {
-        throw new Error('Selected variant stock changed, please retry checkout');
+    if (!groupedUpdates.has(key)) {
+      groupedUpdates.set(key, { product: update.product, updates: [] });
+    }
+
+    groupedUpdates.get(key).updates.push(update);
+  }
+
+  for (const entry of groupedUpdates.values()) {
+    const { product, updates } = entry;
+    if (!product) {
+      throw new Error('Product no longer exists, please retry checkout');
+    }
+
+    let touchedVariants = false;
+
+    for (const update of updates) {
+      if (Number.isInteger(update.variantIndex) && update.variantIndex >= 0) {
+        const variant = product.variants[update.variantIndex];
+
+        if (!variant || Number(variant.stock) < update.quantity) {
+          throw new Error('Selected variant stock changed, please retry checkout');
+        }
+
+        variant.stock -= update.quantity;
+        touchedVariants = true;
+      } else {
+        const availableStock = Number(product.countInStock || 0);
+        if (availableStock < update.quantity) {
+          throw new Error('Product stock changed, please retry checkout');
+        }
+        product.countInStock = availableStock - update.quantity;
       }
+    }
 
-      variant.stock -= update.quantity;
-      update.product.markModified('variants');
-      update.product.countInStock = update.product.variants.reduce(
+    if (touchedVariants) {
+      product.markModified('variants');
+      product.countInStock = product.variants.reduce(
         (sum, currentVariant) => sum + Number(currentVariant.stock || 0),
         0
       );
-    } else {
-      update.product.countInStock -= update.quantity;
     }
 
-    await update.product.save();
+    await product.save();
   }
 };
 
