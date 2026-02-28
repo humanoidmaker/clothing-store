@@ -3,7 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const adminNavItems = [
   { label: 'Products', to: '/admin/products' },
-  { label: 'Orders', to: '/admin/orders' }
+  { label: 'Orders', to: '/admin/orders' },
+  { label: 'Settings', to: '/admin/settings' }
 ];
 
 const navButtonSx = {

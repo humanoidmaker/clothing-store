@@ -23,6 +23,7 @@ import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
@@ -53,6 +54,7 @@ const formatDateTime = (value) => {
 
 const OrderInvoicePage = () => {
   const { id } = useParams();
+  const { storeName } = useStoreSettings();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -157,7 +159,7 @@ const OrderInvoicePage = () => {
             }}
           >
             <Stack spacing={0.4}>
-              <Typography sx={{ fontWeight: 700 }}>Astra Attire</Typography>
+              <Typography sx={{ fontWeight: 700 }}>{storeName}</Typography>
               <Typography variant="body2" color="text.secondary">
                 India
               </Typography>

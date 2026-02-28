@@ -36,6 +36,7 @@ import PageHeader from '../components/PageHeader';
 import HtmlEditorField from '../components/HtmlEditorField';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import { formatINR } from '../utils/currency';
 
 const defaultCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
@@ -48,17 +49,17 @@ const createVariantId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-const initialForm = {
+const createInitialForm = (storeName = 'Astra Attire') => ({
   name: '',
   description: '',
-  brand: 'Astra Attire',
+  brand: String(storeName || '').trim() || 'Astra Attire',
   category: 'T-Shirts',
   gender: 'Unisex',
   material: '',
   fit: 'Regular',
   price: '',
   countInStock: ''
-};
+});
 
 const createEmptyVariant = () => ({
   id: createVariantId(),
@@ -157,9 +158,10 @@ const readValidatedImages = async (files) => {
 const AdminProductsPage = () => {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
+  const { storeName } = useStoreSettings();
 
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(() => createInitialForm(storeName));
   const [productImages, setProductImages] = useState([]);
   const [variantRows, setVariantRows] = useState([createEmptyVariant()]);
   const [editingProductId, setEditingProductId] = useState('');
@@ -209,7 +211,7 @@ const AdminProductsPage = () => {
   }, [catalogOptions.brands, products]);
 
   const resetForm = () => {
-    setForm(initialForm);
+    setForm(createInitialForm(storeName));
     setProductImages([]);
     setVariantRows([createEmptyVariant()]);
     setEditingProductId('');

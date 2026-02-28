@@ -3,9 +3,11 @@ import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, TextFie
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 
 const RegisterPage = () => {
   const { register } = useAuth();
+  const { storeName } = useStoreSettings();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -41,7 +43,7 @@ const RegisterPage = () => {
       <Card sx={{ width: '100%', maxWidth: 470 }}>
         <CardContent component="form" onSubmit={onSubmit} sx={{ p: { xs: 1.5, md: 2 } }}>
           <Typography variant="overline" sx={{ color: 'secondary.main', fontWeight: 700, letterSpacing: '0.12em' }}>
-            Join Astra Attire
+            Join {storeName}
           </Typography>
           <Typography variant="h5" sx={{ mb: 0.7 }}>
             Create Your Account

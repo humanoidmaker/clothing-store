@@ -26,6 +26,7 @@ import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import { Link as RouterLink, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import { useWishlist } from '../context/WishlistContext';
 
 const navLinkSx = {
@@ -39,9 +40,23 @@ const navLinkSx = {
   }
 };
 
+const searchControlHeight = 34;
+const searchFieldSx = {
+  '& .MuiOutlinedInput-root': {
+    height: searchControlHeight,
+    backgroundColor: 'rgba(255,255,255,0.96)'
+  }
+};
+const searchButtonSx = {
+  flexShrink: 0,
+  height: searchControlHeight,
+  minHeight: searchControlHeight
+};
+
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { storeName } = useStoreSettings();
   const { user, isAdmin, logout } = useAuth();
   const { itemsCount: cartItemsCount } = useCart();
   const { itemsCount: wishlistItemsCount } = useWishlist();
@@ -101,7 +116,7 @@ const Navbar = () => {
                 flexShrink: 0
               }}
             >
-              Astra Attire
+              {storeName}
             </Typography>
 
             <Stack direction="row" spacing={0.4} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1 }}>
@@ -131,11 +146,7 @@ const Navbar = () => {
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
                   inputProps={{ 'aria-label': 'Search products' }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      backgroundColor: 'rgba(255,255,255,0.96)'
-                    }
-                  }}
+                  sx={searchFieldSx}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
@@ -156,7 +167,7 @@ const Navbar = () => {
                     ) : null
                   }}
                 />
-                <Button type="submit" variant="contained" color="secondary" sx={{ flexShrink: 0 }}>
+                <Button type="submit" size="small" variant="contained" color="secondary" sx={searchButtonSx}>
                   Search
                 </Button>
               </Box>
@@ -217,11 +228,7 @@ const Navbar = () => {
                 value={searchText}
                 onChange={(event) => setSearchText(event.target.value)}
                 inputProps={{ 'aria-label': 'Search products' }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    backgroundColor: 'rgba(255,255,255,0.96)'
-                  }
-                }}
+                sx={searchFieldSx}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -239,10 +246,10 @@ const Navbar = () => {
                         <CloseOutlinedIcon fontSize="small" />
                       </IconButton>
                     </InputAdornment>
-                  ) : null
+                    ) : null
                 }}
               />
-              <Button type="submit" variant="contained" color="secondary" sx={{ flexShrink: 0 }}>
+              <Button type="submit" size="small" variant="contained" color="secondary" sx={searchButtonSx}>
                 Search
               </Button>
             </Box>

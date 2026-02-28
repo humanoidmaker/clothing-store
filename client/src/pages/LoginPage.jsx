@@ -3,9 +3,11 @@ import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, TextFie
 import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 
 const LoginPage = () => {
   const { login } = useAuth();
+  const { storeName } = useStoreSettings();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -39,7 +41,7 @@ const LoginPage = () => {
             Welcome Back
           </Typography>
           <Typography variant="h5" sx={{ mb: 0.5 }}>
-            Login to Astra Attire
+            Login to {storeName}
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Continue from where you left off and manage your orders in one place.

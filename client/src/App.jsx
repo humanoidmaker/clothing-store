@@ -6,9 +6,11 @@ import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { StoreSettingsProvider } from './context/StoreSettingsContext';
 import { WishlistProvider } from './context/WishlistContext';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminProductsPage from './pages/AdminProductsPage';
+import AdminSettingsPage from './pages/AdminSettingsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import HomePage from './pages/HomePage';
@@ -32,67 +34,70 @@ const App = () => {
         }}
       />
 
-      <AuthProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <BrowserRouter>
-              <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-                <Navbar />
-                <Box sx={{ flex: 1 }}>
-                  <Container maxWidth="lg" sx={{ pt: { xs: 1.2, md: 1.6 }, pb: { xs: 3, md: 4 } }}>
-                    <Routes>
-                      <Route path="/" element={<HomePage />} />
-                      <Route path="/products/:id" element={<ProductPage />} />
-                      <Route path="/wishlist" element={<WishlistPage />} />
-                      <Route path="/cart" element={<CartPage />} />
-                      <Route path="/login" element={<LoginPage />} />
-                      <Route path="/register" element={<RegisterPage />} />
-                      <Route
-                        path="/checkout"
-                        element={
-                          <ProtectedRoute>
-                            <CheckoutPage />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/orders"
-                        element={
-                          <ProtectedRoute>
-                            <OrdersPage />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/orders/:id"
-                        element={
-                          <ProtectedRoute>
-                            <OrderInvoicePage />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/admin"
-                        element={
-                          <ProtectedRoute adminOnly>
-                            <AdminSectionLayout />
-                          </ProtectedRoute>
-                        }
-                      >
-                        <Route index element={<Navigate to="products" replace />} />
-                        <Route path="products" element={<AdminProductsPage />} />
-                        <Route path="orders" element={<AdminOrdersPage />} />
-                      </Route>
-                      <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
-                  </Container>
+      <StoreSettingsProvider>
+        <AuthProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <BrowserRouter>
+                <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+                  <Navbar />
+                  <Box sx={{ flex: 1 }}>
+                    <Container maxWidth="lg" sx={{ pt: { xs: 1.2, md: 1.6 }, pb: { xs: 3, md: 4 } }}>
+                      <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/products/:id" element={<ProductPage />} />
+                        <Route path="/wishlist" element={<WishlistPage />} />
+                        <Route path="/cart" element={<CartPage />} />
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/register" element={<RegisterPage />} />
+                        <Route
+                          path="/checkout"
+                          element={
+                            <ProtectedRoute>
+                              <CheckoutPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/orders"
+                          element={
+                            <ProtectedRoute>
+                              <OrdersPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/orders/:id"
+                          element={
+                            <ProtectedRoute>
+                              <OrderInvoicePage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin"
+                          element={
+                            <ProtectedRoute adminOnly>
+                              <AdminSectionLayout />
+                            </ProtectedRoute>
+                          }
+                        >
+                          <Route index element={<Navigate to="products" replace />} />
+                          <Route path="products" element={<AdminProductsPage />} />
+                          <Route path="orders" element={<AdminOrdersPage />} />
+                          <Route path="settings" element={<AdminSettingsPage />} />
+                        </Route>
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                    </Container>
+                  </Box>
+                  <AppFooter />
                 </Box>
-                <AppFooter />
-              </Box>
-            </BrowserRouter>
-          </WishlistProvider>
-        </CartProvider>
-      </AuthProvider>
+              </BrowserRouter>
+            </WishlistProvider>
+          </CartProvider>
+        </AuthProvider>
+      </StoreSettingsProvider>
     </ThemeProvider>
   );
 };

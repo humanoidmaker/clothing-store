@@ -24,6 +24,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
@@ -45,6 +46,7 @@ const loadRazorpayScript = () =>
 const CheckoutPage = () => {
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
+  const { storeName } = useStoreSettings();
   const navigate = useNavigate();
 
   const [submitting, setSubmitting] = useState(false);
@@ -117,7 +119,7 @@ const CheckoutPage = () => {
           key: data.keyId,
           amount: data.amount,
           currency: data.currency,
-          name: 'Astra Attire',
+          name: storeName,
           description: 'Fashion order payment',
           order_id: data.orderId,
           handler: (response) => resolve(response),
