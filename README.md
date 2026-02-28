@@ -69,10 +69,12 @@ This project is now fashion-specific (not general-purpose ecommerce):
 - `POST /api/orders/razorpay/verify` (protected)
 - `GET /api/orders/my` (protected)
 - `GET /api/orders` (admin)
+- `PUT /api/orders/:id/status` (admin)
 
 ## Notes
 
 - Prices are stored/displayed in INR.
 - Seeded sample catalog includes Nike shoes with size-wise pricing.
+- Admin dashboard can create, edit, delete products and update order statuses (`pending`, `processing`, `paid`, `shipped`, `delivered`, `cancelled`).
 - Admin can create variant pricing with `variants` JSON (`size`, `color`, `price`, `stock`).
 - If you previously seeded older products, run `npm run seed` again to load the new clothing dataset.

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -19,6 +19,7 @@ import { formatINR } from '../utils/currency';
 
 const statusColorMap = {
   pending: 'warning',
+  processing: 'info',
   paid: 'success',
   shipped: 'info',
   delivered: 'success',

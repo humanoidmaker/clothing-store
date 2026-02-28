@@ -3,6 +3,8 @@ const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 
+const ORDER_STATUSES = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
+
 const validateShippingAddress = (shippingAddress) => {
   const requiredKeys = ['street', 'city', 'state', 'postalCode', 'country'];
 
@@ -344,10 +346,40 @@ const getAllOrders = async (req, res) => {
   return res.json(orders);
 };
 
+const updateOrderStatus = async (req, res) => {
+  const { status } = req.body;
+
+  if (!status || typeof status !== 'string') {
+    return res.status(400).json({ message: 'Order status is required' });
+  }
+
+  const normalizedStatus = status.trim().toLowerCase();
+  if (!ORDER_STATUSES.includes(normalizedStatus)) {
+    return res.status(400).json({
+      message: `Invalid status. Allowed values: ${ORDER_STATUSES.join(', ')}`
+    });
+  }
+
+  const order = await Order.findById(req.params.id);
+  if (!order) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  order.status = normalizedStatus;
+  if (normalizedStatus === 'paid' && !order.paidAt) {
+    order.paidAt = new Date();
+  }
+
+  const updatedOrder = await order.save();
+  const populatedOrder = await updatedOrder.populate('user', 'name email');
+  return res.json(populatedOrder);
+};
+
 module.exports = {
   createOrder,
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
   getMyOrders,
-  getAllOrders
+  getAllOrders,
+  updateOrderStatus
 };
