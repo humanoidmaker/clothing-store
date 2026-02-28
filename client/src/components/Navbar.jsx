@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AppBar,
   Badge,
@@ -15,12 +15,14 @@ import {
   Toolbar,
   Typography
 } from '@mui/material';
+import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import { Link as RouterLink, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 
 const navLinkSx = {
   color: 'common.white',
@@ -35,11 +37,15 @@ const navLinkSx = {
 
 const Navbar = () => {
   const { user, isAdmin, logout } = useAuth();
-  const { itemsCount } = useCart();
+  const { itemsCount: cartItemsCount } = useCart();
+  const { itemsCount: wishlistItemsCount } = useWishlist();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const drawerLinks = useMemo(() => {
-    const links = [{ label: 'Shop', to: '/' }, { label: 'Cart', to: '/cart' }];
+    const links = [
+      { label: 'Shop', to: '/' },
+      { label: 'Cart', to: '/cart' }
+    ];
     if (user) links.push({ label: 'My Orders', to: '/orders' });
     if (isAdmin) links.push({ label: 'Admin', to: '/admin/products' });
     return links;
@@ -81,8 +87,14 @@ const Navbar = () => {
             </Stack>
 
             <Stack direction="row" spacing={0.4} alignItems="center" sx={{ ml: 'auto' }}>
+              <IconButton component={RouterLink} to="/wishlist" sx={{ color: 'common.white' }} size="small">
+                <Badge badgeContent={wishlistItemsCount} color="secondary">
+                  <FavoriteBorderOutlinedIcon fontSize="small" />
+                </Badge>
+              </IconButton>
+
               <IconButton component={RouterLink} to="/cart" sx={{ color: 'common.white' }} size="small">
-                <Badge badgeContent={itemsCount} color="secondary">
+                <Badge badgeContent={cartItemsCount} color="secondary">
                   <ShoppingBagOutlinedIcon fontSize="small" />
                 </Badge>
               </IconButton>

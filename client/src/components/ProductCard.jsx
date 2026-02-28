@@ -1,12 +1,25 @@
-﻿import { Card, CardActions, CardContent, CardMedia, Chip, Stack, Typography, Button } from '@mui/material';
+import {
+  Button,
+  Card,
+  CardActionArea,
+  CardActions,
+  CardContent,
+  CardMedia,
+  Chip,
+  Stack,
+  Typography
+} from '@mui/material';
 import AddShoppingCartOutlinedIcon from '@mui/icons-material/AddShoppingCartOutlined';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
+import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
 import { Link as RouterLink } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { formatINR } from '../utils/currency';
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
 
   const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
   const lowestVariantPrice = hasVariants
@@ -21,6 +34,7 @@ const ProductCard = ({ product }) => {
   const defaultColor = defaultVariant?.color || product.colors?.[0] || '';
   const defaultPrice = defaultVariant?.price ?? product.price;
   const defaultStock = defaultVariant?.stock ?? product.countInStock;
+  const wished = isInWishlist(product._id);
 
   return (
     <Card
@@ -38,41 +52,47 @@ const ProductCard = ({ product }) => {
         }
       }}
     >
-      <CardMedia component="img" height="190" image={product.image} alt={product.name} />
+      <CardActionArea
+        component={RouterLink}
+        to={`/products/${product._id}`}
+        sx={{ display: 'block', flexGrow: 1, alignItems: 'stretch' }}
+      >
+        <CardMedia component="img" height="190" image={product.image} alt={product.name} />
 
-      <CardContent sx={{ flexGrow: 1, p: 1.2 }}>
-        <Stack direction="row" spacing={0.6} sx={{ mb: 0.8, flexWrap: 'wrap' }}>
-          <Chip size="small" label={product.category} />
-          <Chip size="small" label={product.gender} color="secondary" variant="outlined" />
-        </Stack>
+        <CardContent sx={{ flexGrow: 1, p: 1.2 }}>
+          <Stack direction="row" spacing={0.6} sx={{ mb: 0.8, flexWrap: 'wrap' }}>
+            <Chip size="small" label={product.category} />
+            <Chip size="small" label={product.gender} color="secondary" variant="outlined" />
+          </Stack>
 
-        <Typography variant="subtitle1" sx={{ mb: 0.35, lineHeight: 1.25, fontWeight: 700 }}>
-          {product.name}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ minHeight: 32 }}>
-          {product.description}
-        </Typography>
+          <Typography variant="subtitle1" sx={{ mb: 0.35, lineHeight: 1.25, fontWeight: 700 }}>
+            {product.name}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ minHeight: 32 }}>
+            {product.description}
+          </Typography>
 
-        <Stack direction="row" spacing={0.6} sx={{ mt: 0.8, mb: 0.8, flexWrap: 'wrap' }}>
-          {(product.colors || []).slice(0, 3).map((color) => (
-            <Chip key={color} size="small" label={color} variant="outlined" />
-          ))}
-        </Stack>
+          <Stack direction="row" spacing={0.6} sx={{ mt: 0.8, mb: 0.8, flexWrap: 'wrap' }}>
+            {(product.colors || []).slice(0, 3).map((color) => (
+              <Chip key={color} size="small" label={color} variant="outlined" />
+            ))}
+          </Stack>
 
-        <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }}>
-          {hasVariants ? `From ${formatINR(lowestVariantPrice)}` : formatINR(product.price)}
-        </Typography>
-      </CardContent>
+          <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }}>
+            {hasVariants ? `From ${formatINR(lowestVariantPrice)}` : formatINR(product.price)}
+          </Typography>
+        </CardContent>
+      </CardActionArea>
 
       <CardActions sx={{ px: 1.2, pb: 1.2, pt: 0, gap: 0.8, mt: 'auto' }}>
         <Button
-          component={RouterLink}
-          to={`/products/${product._id}`}
-          variant="outlined"
+          variant={wished ? 'contained' : 'outlined'}
+          color="secondary"
           fullWidth
-          startIcon={<VisibilityOutlinedIcon />}
+          startIcon={wished ? <FavoriteOutlinedIcon /> : <FavoriteBorderOutlinedIcon />}
+          onClick={() => toggleWishlist(product)}
         >
-          View
+          {wished ? 'Wishlisted' : 'Wishlist'}
         </Button>
         <Button
           variant="contained"
@@ -90,4 +110,3 @@ const ProductCard = ({ product }) => {
 };
 
 export default ProductCard;
-

@@ -156,10 +156,17 @@ const CheckoutPage = () => {
         subtitle="Securely complete your order with Razorpay or Cash on Delivery."
       />
 
-      <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2.2} alignItems="flex-start">
-        <Card sx={{ width: '100%', flex: 1 }}>
-          <CardContent component="form" onSubmit={onSubmit}>
-            <Grid container spacing={2}>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 1.2,
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 320px' },
+          alignItems: 'start'
+        }}
+      >
+        <Card sx={{ width: '100%' }}>
+          <CardContent component="form" onSubmit={onSubmit} sx={{ p: 1.2 }}>
+            <Grid container spacing={1.2}>
               <Grid item xs={12} md={6}>
                 <FormControl fullWidth>
                   <InputLabel id="payment-method-label">Payment Method</InputLabel>
@@ -200,7 +207,7 @@ const CheckoutPage = () => {
             </Grid>
 
             {error && (
-              <Alert severity="error" sx={{ mt: 2 }}>
+              <Alert severity="error" sx={{ mt: 1.2 }}>
                 {error}
               </Alert>
             )}
@@ -208,8 +215,7 @@ const CheckoutPage = () => {
             <Button
               type="submit"
               variant="contained"
-              size="large"
-              sx={{ mt: 2 }}
+              sx={{ mt: 1.2 }}
               startIcon={paymentMethod === 'Razorpay' ? <CreditCardOutlinedIcon /> : <LocalShippingOutlinedIcon />}
               disabled={submitting}
             >
@@ -218,12 +224,12 @@ const CheckoutPage = () => {
           </CardContent>
         </Card>
 
-        <Card sx={{ width: { xs: '100%', xl: 340 } }}>
-          <CardContent>
+        <Card sx={{ width: '100%', position: { md: 'sticky' }, top: { md: 68 } }}>
+          <CardContent sx={{ p: 1.2 }}>
             <Typography variant="h6">Order Review</Typography>
-            <Divider sx={{ my: 1.5 }} />
+            <Divider sx={{ my: 1.1 }} />
 
-            <Stack spacing={1.2}>
+            <Stack spacing={0.8}>
               {items.map((item) => (
                 <Box key={item.cartKey}>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -238,13 +244,13 @@ const CheckoutPage = () => {
               ))}
             </Stack>
 
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="h4" color="primary">
+            <Divider sx={{ my: 1.2 }} />
+            <Typography variant="h5" color="primary">
               {formatINR(subtotal)}
             </Typography>
           </CardContent>
         </Card>
-      </Stack>
+      </Box>
     </Box>
   );
 };

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -14,16 +14,20 @@ import {
   Typography
 } from '@mui/material';
 import AddShoppingCartOutlinedIcon from '@mui/icons-material/AddShoppingCartOutlined';
+import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
+import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import PageHeader from '../components/PageHeader';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import api from '../api';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { formatINR } from '../utils/currency';
 
 const ProductPage = () => {
   const { id } = useParams();
   const { addToCart } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
 
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -142,6 +146,7 @@ const ProductPage = () => {
     availableStock > 0 &&
     (availableSizes.length ? Boolean(selectedSize) : true) &&
     (variantRequiresColor ? Boolean(selectedColor) : true);
+  const wished = isInWishlist(product._id);
 
   return (
     <Box>
@@ -299,6 +304,14 @@ const ProductPage = () => {
                   }
                 >
                   Add to Bag
+                </Button>
+                <Button
+                  variant={wished ? 'contained' : 'outlined'}
+                  color="secondary"
+                  startIcon={wished ? <FavoriteOutlinedIcon /> : <FavoriteBorderOutlinedIcon />}
+                  onClick={() => toggleWishlist(product)}
+                >
+                  {wished ? 'Wishlisted' : 'Wishlist'}
                 </Button>
                 <Button component={RouterLink} to="/cart" variant="outlined" startIcon={<ShoppingBagOutlinedIcon />}>
                   View Bag

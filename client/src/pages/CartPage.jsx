@@ -44,17 +44,24 @@ const CartPage = () => {
       )}
 
       {items.length > 0 && (
-        <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2.2} alignItems="flex-start">
-          <Stack spacing={1.4} sx={{ width: '100%', flex: 1 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1.2,
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 300px' },
+            alignItems: 'start'
+          }}
+        >
+          <Stack spacing={1} sx={{ width: '100%', minWidth: 0 }}>
             {items.map((item) => (
               <Card key={item.cartKey}>
-                <CardContent>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+                <CardContent sx={{ p: 1.1 }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ sm: 'center' }}>
                     <Box
                       component="img"
                       src={item.image}
                       alt={item.name}
-                      sx={{ width: 84, height: 100, objectFit: 'cover' }}
+                      sx={{ width: 70, height: 84, objectFit: 'cover' }}
                     />
 
                     <Box sx={{ flex: 1 }}>
@@ -65,7 +72,7 @@ const CartPage = () => {
                         {formatINR(item.price)} each
                       </Typography>
 
-                      <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                      <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap sx={{ mt: 0.6 }}>
                         {item.selectedSize && <Chip size="small" label={`Size: ${item.selectedSize}`} />}
                         {item.selectedColor && <Chip size="small" label={`Color: ${item.selectedColor}`} variant="outlined" />}
                       </Stack>
@@ -77,7 +84,7 @@ const CartPage = () => {
                       label="Qty"
                       value={item.quantity}
                       onChange={(event) => updateQuantity(item.cartKey, Number(event.target.value))}
-                      sx={{ minWidth: 92 }}
+                      sx={{ minWidth: 82 }}
                     >
                       {Array.from({ length: Math.max(1, item.countInStock || 1) }, (_, index) => (
                         <MenuItem key={index + 1} value={index + 1}>
@@ -100,14 +107,14 @@ const CartPage = () => {
             ))}
           </Stack>
 
-          <Card sx={{ width: { xs: '100%', xl: 320 } }}>
-            <CardContent>
+          <Card sx={{ width: '100%', position: { md: 'sticky' }, top: { md: 68 } }}>
+            <CardContent sx={{ p: 1.2 }}>
               <Typography variant="h6">Order Summary</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 {items.length} unique items
               </Typography>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h4" color="primary" sx={{ mb: 2 }}>
+              <Divider sx={{ my: 1.2 }} />
+              <Typography variant="h5" color="primary" sx={{ mb: 1.2 }}>
                 {formatINR(subtotal)}
               </Typography>
               <Button variant="contained" fullWidth startIcon={<ShoppingBagOutlinedIcon />} onClick={proceedToCheckout}>
@@ -115,7 +122,7 @@ const CartPage = () => {
               </Button>
             </CardContent>
           </Card>
-        </Stack>
+        </Box>
       )}
     </Box>
   );
