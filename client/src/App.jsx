@@ -1,11 +1,13 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Box, Container, CssBaseline, GlobalStyles, ThemeProvider } from '@mui/material';
 import AppFooter from './components/AppFooter';
+import AdminSectionLayout from './components/AdminSectionLayout';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
+import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminProductsPage from './pages/AdminProductsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
@@ -61,13 +63,17 @@ const App = () => {
                         }
                       />
                       <Route
-                        path="/admin/products"
+                        path="/admin"
                         element={
                           <ProtectedRoute adminOnly>
-                            <AdminProductsPage />
+                            <AdminSectionLayout />
                           </ProtectedRoute>
                         }
-                      />
+                      >
+                        <Route index element={<Navigate to="products" replace />} />
+                        <Route path="products" element={<AdminProductsPage />} />
+                        <Route path="orders" element={<AdminOrdersPage />} />
+                      </Route>
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Container>

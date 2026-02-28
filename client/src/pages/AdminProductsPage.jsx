@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -7,7 +7,6 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Divider,
   Grid,
   MenuItem,
   Stack,
@@ -44,16 +43,6 @@ const initialForm = {
 
 const categories = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
 const genders = ['Men', 'Women', 'Unisex'];
-const orderStatuses = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
-
-const statusColorMap = {
-  pending: 'warning',
-  processing: 'info',
-  paid: 'success',
-  shipped: 'info',
-  delivered: 'success',
-  cancelled: 'error'
-};
 
 const mapProductToForm = (product) => ({
   name: product.name || '',
@@ -73,25 +62,17 @@ const mapProductToForm = (product) => ({
 
 const AdminProductsPage = () => {
   const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [editingProductId, setEditingProductId] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [loadingOrders, setLoadingOrders] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState('');
-  const [statusUpdatingId, setStatusUpdatingId] = useState('');
-  const [orderStatusDrafts, setOrderStatusDrafts] = useState({});
-
-  const pendingOrdersCount = useMemo(
-    () => orders.filter((order) => ['pending', 'processing'].includes(order.status)).length,
-    [orders]
-  );
 
   const fetchProducts = async () => {
     setLoadingProducts(true);
+    setError('');
 
     try {
       const { data } = await api.get('/products');
@@ -103,23 +84,8 @@ const AdminProductsPage = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    setLoadingOrders(true);
-
-    try {
-      const { data } = await api.get('/orders');
-      setOrders(data);
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Failed to load admin orders');
-    } finally {
-      setLoadingOrders(false);
-    }
-  };
-
   useEffect(() => {
-    setError('');
     fetchProducts();
-    fetchOrders();
   }, []);
 
   const onChange = (event) => {
@@ -230,53 +196,13 @@ const AdminProductsPage = () => {
     }
   };
 
-  const onStatusDraftChange = (orderId, status) => {
-    setOrderStatusDrafts((current) => ({
-      ...current,
-      [orderId]: status
-    }));
-  };
-
-  const onUpdateOrderStatus = async (orderId) => {
-    const order = orders.find((item) => item._id === orderId);
-    if (!order) return;
-
-    const nextStatus = orderStatusDrafts[orderId] || order.status;
-    if (nextStatus === order.status) return;
-
-    setError('');
-    setSuccess('');
-    setStatusUpdatingId(orderId);
-
-    try {
-      const { data } = await api.put(`/orders/${orderId}/status`, { status: nextStatus });
-      setOrders((current) => current.map((item) => (item._id === orderId ? data : item)));
-      setOrderStatusDrafts((current) => {
-        const next = { ...current };
-        delete next[orderId];
-        return next;
-      });
-      setSuccess('Order status updated');
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Failed to update order status');
-    } finally {
-      setStatusUpdatingId('');
-    }
-  };
-
   return (
     <Box>
       <PageHeader
         eyebrow="Admin"
-        title="Dashboard"
-        subtitle="Manage products, track incoming orders and update delivery status."
-        actions={
-          <Stack direction="row" spacing={0.7}>
-            <Chip size="small" label={`Products: ${products.length}`} />
-            <Chip size="small" color="warning" label={`Pending: ${pendingOrdersCount}`} />
-            <Chip size="small" color="info" label={`Orders: ${orders.length}`} />
-          </Stack>
-        }
+        title="Products Management"
+        subtitle="Add, edit and delete catalog items with size-wise variant pricing."
+        actions={<Chip size="small" label={`Total Products: ${products.length}`} />}
       />
 
       {(error || success) && (
@@ -458,120 +384,6 @@ const AdminProductsPage = () => {
                       </TableCell>
                     </TableRow>
                   ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent sx={{ overflowX: 'auto' }}>
-            <Typography variant="h6" sx={{ mb: 0.5 }}>
-              Order Status Management
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.2 }}>
-              View received orders and update status to processing, shipped, delivered, or cancelled.
-            </Typography>
-            <Divider sx={{ mb: 1.2 }} />
-
-            {loadingOrders && (
-              <Box sx={{ py: 4, display: 'grid', placeItems: 'center' }}>
-                <CircularProgress />
-              </Box>
-            )}
-
-            {!loadingOrders && orders.length === 0 && <Alert severity="info">No orders yet.</Alert>}
-
-            {!loadingOrders && orders.length > 0 && (
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Order</TableCell>
-                    <TableCell>Customer</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Items</TableCell>
-                    <TableCell align="right">Total</TableCell>
-                    <TableCell>Current</TableCell>
-                    <TableCell>Change Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {orders.map((order) => {
-                    const selectedStatus = orderStatusDrafts[order._id] || order.status;
-                    const itemNames = (order.orderItems || [])
-                      .slice(0, 2)
-                      .map((item) => `${item.name} x${item.quantity}`)
-                      .join(', ');
-                    const extraItemCount = Math.max(0, (order.orderItems || []).length - 2);
-                    const isSameStatus = selectedStatus === order.status;
-
-                    return (
-                      <TableRow key={order._id} hover>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                            {order._id.slice(-8).toUpperCase()}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {order.paymentMethod}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">{order.user?.name || 'Guest'}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {order.user?.email || '-'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{new Date(order.createdAt).toLocaleDateString('en-IN')}</TableCell>
-                        <TableCell sx={{ minWidth: 220 }}>
-                          <Typography variant="body2">{itemNames || '-'}</Typography>
-                          {extraItemCount > 0 && (
-                            <Typography variant="caption" color="text.secondary">
-                              +{extraItemCount} more item(s)
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={order.status}
-                            size="small"
-                            color={statusColorMap[order.status] || 'default'}
-                            sx={{ textTransform: 'capitalize' }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ minWidth: 220 }}>
-                          <Stack direction="row" spacing={0.6}>
-                            <TextField
-                              select
-                              size="small"
-                              value={selectedStatus}
-                              onChange={(event) => onStatusDraftChange(order._id, event.target.value)}
-                              sx={{ minWidth: 130 }}
-                            >
-                              {orderStatuses.map((status) => (
-                                <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>
-                                  {status}
-                                </MenuItem>
-                              ))}
-                            </TextField>
-                            <Button
-                              variant="contained"
-                              size="small"
-                              disabled={isSameStatus || statusUpdatingId === order._id}
-                              startIcon={
-                                statusUpdatingId === order._id
-                                  ? <CircularProgress size={14} color="inherit" />
-                                  : undefined
-                              }
-                              onClick={() => onUpdateOrderStatus(order._id)}
-                            >
-                              {statusUpdatingId === order._id ? 'Updating...' : 'Update'}
-                            </Button>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
                 </TableBody>
               </Table>
             )}

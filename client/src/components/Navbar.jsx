@@ -47,7 +47,7 @@ const Navbar = () => {
       { label: 'Cart', to: '/cart' }
     ];
     if (user) links.push({ label: 'My Orders', to: '/orders' });
-    if (isAdmin) links.push({ label: 'Admin', to: '/admin/products' });
+    if (isAdmin) links.push({ label: 'Admin', to: '/admin' });
     return links;
   }, [user, isAdmin]);
 
@@ -80,7 +80,7 @@ const Navbar = () => {
                 </Box>
               )}
               {isAdmin && (
-                <Box component={NavLink} to="/admin/products" sx={navLinkSx}>
+                <Box component={NavLink} to="/admin" sx={navLinkSx}>
                   Admin
                 </Box>
               )}
