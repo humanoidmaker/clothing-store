@@ -22,6 +22,14 @@ const orderItemSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 1
+    },
+    selectedSize: {
+      type: String,
+      default: ''
+    },
+    selectedColor: {
+      type: String,
+      default: ''
     }
   },
   { _id: false }

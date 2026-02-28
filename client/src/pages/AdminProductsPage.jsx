@@ -1,4 +1,23 @@
 import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  Grid,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography
+} from '@mui/material';
+import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import api from '../api';
 import { formatINR } from '../utils/currency';
 
@@ -6,11 +25,19 @@ const initialForm = {
   name: '',
   description: '',
   image: '',
-  brand: '',
-  category: '',
+  brand: 'Astra Attire',
+  category: 'T-Shirts',
+  gender: 'Unisex',
+  sizes: 'S,M,L,XL',
+  colors: 'Black,White',
+  material: '',
+  fit: 'Regular',
   price: '',
   countInStock: ''
 };
+
+const categories = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts'];
+const genders = ['Men', 'Women', 'Unisex'];
 
 const AdminProductsPage = () => {
   const [products, setProducts] = useState([]);
@@ -74,105 +101,152 @@ const AdminProductsPage = () => {
   };
 
   return (
-    <section className="admin-layout">
-      <form className="card form-stack" onSubmit={onCreate}>
-        <h1>Add Product</h1>
+    <Box>
+      <Typography variant="h4" sx={{ mb: 2 }}>
+        Admin Catalog
+      </Typography>
 
-        <div className="form-grid">
-          <div>
-            <label htmlFor="name">Name</label>
-            <input id="name" name="name" value={form.name} onChange={onChange} required />
-          </div>
+      <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2.2} alignItems="flex-start">
+        <Card sx={{ borderRadius: 3, width: '100%', flex: 1 }}>
+          <CardContent component="form" onSubmit={onCreate}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Add Clothing Product
+            </Typography>
 
-          <div>
-            <label htmlFor="category">Category</label>
-            <input id="category" name="category" value={form.category} onChange={onChange} required />
-          </div>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Name" name="name" value={form.name} onChange={onChange} required />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField select fullWidth label="Category" name="category" value={form.category} onChange={onChange}>
+                  {categories.map((category) => (
+                    <MenuItem key={category} value={category}>
+                      {category}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField select fullWidth label="Gender" name="gender" value={form.gender} onChange={onChange}>
+                  {genders.map((gender) => (
+                    <MenuItem key={gender} value={gender}>
+                      {gender}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Brand" name="brand" value={form.brand} onChange={onChange} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Sizes (comma separated)" name="sizes" value={form.sizes} onChange={onChange} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Colors (comma separated)" name="colors" value={form.colors} onChange={onChange} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Material" name="material" value={form.material} onChange={onChange} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Fit" name="fit" value={form.fit} onChange={onChange} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Price (INR)" name="price" type="number" min="0" value={form.price} onChange={onChange} required />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Stock"
+                  name="countInStock"
+                  type="number"
+                  min="0"
+                  value={form.countInStock}
+                  onChange={onChange}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField fullWidth label="Image URL" name="image" value={form.image} onChange={onChange} />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  label="Description"
+                  name="description"
+                  value={form.description}
+                  onChange={onChange}
+                  required
+                />
+              </Grid>
+            </Grid>
 
-          <div>
-            <label htmlFor="brand">Brand</label>
-            <input id="brand" name="brand" value={form.brand} onChange={onChange} />
-          </div>
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {error}
+              </Alert>
+            )}
 
-          <div>
-            <label htmlFor="price">Price (INR)</label>
-            <input id="price" name="price" type="number" min="0" value={form.price} onChange={onChange} required />
-          </div>
+            <Button type="submit" variant="contained" sx={{ mt: 2 }} disabled={saving}>
+              {saving ? 'Saving...' : 'Create Product'}
+            </Button>
+          </CardContent>
+        </Card>
 
-          <div>
-            <label htmlFor="countInStock">Stock</label>
-            <input
-              id="countInStock"
-              name="countInStock"
-              type="number"
-              min="0"
-              value={form.countInStock}
-              onChange={onChange}
-            />
-          </div>
+        <Card sx={{ borderRadius: 3, width: '100%', flex: 1.2 }}>
+          <CardContent sx={{ overflowX: 'auto' }}>
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              Current Catalog
+            </Typography>
 
-          <div>
-            <label htmlFor="image">Image URL</label>
-            <input id="image" name="image" value={form.image} onChange={onChange} />
-          </div>
-        </div>
+            {loading && (
+              <Box sx={{ py: 6, display: 'grid', placeItems: 'center' }}>
+                <CircularProgress />
+              </Box>
+            )}
 
-        <div>
-          <label htmlFor="description">Description</label>
-          <textarea
-            id="description"
-            name="description"
-            value={form.description}
-            rows="4"
-            onChange={onChange}
-            required
-          />
-        </div>
+            {!loading && products.length === 0 && <Alert severity="info">No products yet.</Alert>}
 
-        {error && <p className="error">{error}</p>}
-
-        <button className="btn btn-primary" type="submit" disabled={saving}>
-          {saving ? 'Saving...' : 'Create product'}
-        </button>
-      </form>
-
-      <div className="card table-wrap">
-        <h2>Catalog</h2>
-
-        {loading && <p>Loading products...</p>}
-
-        {!loading && products.length === 0 && <div className="empty">No products yet.</div>}
-
-        {!loading && products.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th>Stock</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => (
-                <tr key={product._id}>
-                  <td>{product.name}</td>
-                  <td>{product.category}</td>
-                  <td>{formatINR(product.price)}</td>
-                  <td>{product.countInStock}</td>
-                  <td>
-                    <button className="btn btn-danger" onClick={() => onDelete(product._id)} type="button">
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </section>
+            {!loading && products.length > 0 && (
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Category</TableCell>
+                    <TableCell>Gender</TableCell>
+                    <TableCell align="right">Price</TableCell>
+                    <TableCell align="right">Stock</TableCell>
+                    <TableCell align="right">Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {products.map((product) => (
+                    <TableRow key={product._id} hover>
+                      <TableCell>{product.name}</TableCell>
+                      <TableCell>{product.category}</TableCell>
+                      <TableCell>{product.gender}</TableCell>
+                      <TableCell align="right">{formatINR(product.price)}</TableCell>
+                      <TableCell align="right">{product.countInStock}</TableCell>
+                      <TableCell align="right">
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          startIcon={<DeleteOutlineOutlinedIcon />}
+                          onClick={() => onDelete(product._id)}
+                        >
+                          Delete
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </Stack>
+    </Box>
   );
 };
 

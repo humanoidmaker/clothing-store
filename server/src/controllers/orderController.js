@@ -37,12 +37,30 @@ const prepareOrderItems = async (items) => {
       return { error: { status: 400, message: `${product.name} is out of stock` } };
     }
 
+    const selectedSize = String(item.selectedSize || '').trim();
+    const selectedColor = String(item.selectedColor || '').trim();
+
+    if (selectedSize && Array.isArray(product.sizes) && product.sizes.length > 0 && !product.sizes.includes(selectedSize)) {
+      return { error: { status: 400, message: `Invalid size selected for ${product.name}` } };
+    }
+
+    if (
+      selectedColor &&
+      Array.isArray(product.colors) &&
+      product.colors.length > 0 &&
+      !product.colors.includes(selectedColor)
+    ) {
+      return { error: { status: 400, message: `Invalid color selected for ${product.name}` } };
+    }
+
     orderItems.push({
       product: product._id,
       name: product.name,
       image: product.image,
       price: product.price,
-      quantity
+      quantity,
+      selectedSize,
+      selectedColor
     });
 
     stockUpdates.push({ product, quantity });

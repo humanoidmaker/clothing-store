@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
+import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const RegisterPage = () => {
@@ -35,61 +37,52 @@ const RegisterPage = () => {
   };
 
   return (
-    <section className="auth-wrap">
-      <form className="card auth-card form-stack" onSubmit={onSubmit}>
-        <h1>Create Account</h1>
+    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '65vh' }}>
+      <Card sx={{ width: '100%', maxWidth: 500, borderRadius: 4 }}>
+        <CardContent component="form" onSubmit={onSubmit}>
+          <Typography variant="h4" sx={{ mb: 1 }}>
+            Create Account
+          </Typography>
 
-        <div>
-          <label htmlFor="name">Name</label>
-          <input id="name" value={name} onChange={(event) => setName(event.target.value)} required />
-        </div>
+          <Stack spacing={1.6}>
+            <TextField label="Full Name" value={name} onChange={(event) => setName(event.target.value)} required />
+            <TextField label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <TextField
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              minLength={6}
+              required
+            />
+            <TextField
+              label="Confirm Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              minLength={6}
+              required
+            />
 
-        <div>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </div>
+            {error && <Alert severity="error">{error}</Alert>}
 
-        <div>
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            minLength={6}
-            required
-          />
-        </div>
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              startIcon={<PersonAddAltOutlinedIcon />}
+              disabled={submitting}
+            >
+              {submitting ? 'Creating...' : 'Create Account'}
+            </Button>
 
-        <div>
-          <label htmlFor="confirmPassword">Confirm password</label>
-          <input
-            id="confirmPassword"
-            type="password"
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            minLength={6}
-            required
-          />
-        </div>
-
-        {error && <p className="error">{error}</p>}
-
-        <button className="btn btn-primary" disabled={submitting} type="submit">
-          {submitting ? 'Creating...' : 'Create account'}
-        </button>
-
-        <p className="muted">
-          Already have an account? <Link to="/login">Login</Link>
-        </p>
-      </form>
-    </section>
+            <Typography variant="body2" color="text.secondary">
+              Already a member? <RouterLink to="/login">Login</RouterLink>
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
+    </Box>
   );
 };
 

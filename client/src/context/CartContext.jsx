@@ -14,6 +14,9 @@ const parseCart = () => {
   }
 };
 
+const getCartKey = (productId, selectedSize, selectedColor) =>
+  `${productId}__${selectedSize || 'nosize'}__${selectedColor || 'nocolor'}`;
+
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState(parseCart);
 
@@ -21,14 +24,16 @@ export const CartProvider = ({ children }) => {
     localStorage.setItem('cart', JSON.stringify(items));
   }, [items]);
 
-  const addToCart = (product, quantity = 1) => {
+  const addToCart = (product, quantity = 1, selectedSize = '', selectedColor = '') => {
+    const safeQty = Math.max(1, Number(quantity || 1));
+    const cartKey = getCartKey(product._id, selectedSize, selectedColor);
+
     setItems((current) => {
-      const existing = current.find((item) => item.productId === product._id);
-      const safeQty = Math.max(1, Number(quantity || 1));
+      const existing = current.find((item) => item.cartKey === cartKey);
 
       if (existing) {
         return current.map((item) =>
-          item.productId === product._id
+          item.cartKey === cartKey
             ? {
                 ...item,
                 quantity: Math.min(item.quantity + safeQty, product.countInStock || 999)
@@ -40,26 +45,30 @@ export const CartProvider = ({ children }) => {
       return [
         ...current,
         {
+          cartKey,
           productId: product._id,
           name: product.name,
           image: product.image,
           price: product.price,
           countInStock: product.countInStock,
+          selectedSize,
+          selectedColor,
           quantity: Math.min(safeQty, product.countInStock || 999)
         }
       ];
     });
   };
 
-  const removeFromCart = (productId) => {
-    setItems((current) => current.filter((item) => item.productId !== productId));
+  const removeFromCart = (cartKey) => {
+    setItems((current) => current.filter((item) => item.cartKey !== cartKey));
   };
 
-  const updateQuantity = (productId, quantity) => {
+  const updateQuantity = (cartKey, quantity) => {
     const safeQty = Math.max(1, Number(quantity || 1));
+
     setItems((current) =>
       current.map((item) =>
-        item.productId === productId
+        item.cartKey === cartKey
           ? { ...item, quantity: Math.min(safeQty, item.countInStock || 999) }
           : item
       )

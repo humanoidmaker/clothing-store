@@ -1,4 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
@@ -6,7 +7,11 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   const location = useLocation();
 
   if (loading) {
-    return <p>Loading...</p>;
+    return (
+      <Box sx={{ py: 8, display: 'grid', placeItems: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   if (!isAuthenticated) {

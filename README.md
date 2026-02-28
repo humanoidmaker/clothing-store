@@ -1,34 +1,27 @@
-# HumanoidMaker Ecommerce (Node.js + React + MongoDB)
+# Astra Attire Ecommerce (Node.js + React + MongoDB)
 
-A full-stack ecommerce starter built with:
+A clothing-focused ecommerce web app built with:
 
 - Backend: Node.js, Express, MongoDB (Mongoose), JWT auth
-- Frontend: React (Vite), React Router, Axios
-- Data: Product catalog, cart, checkout, orders, admin product management
+- Frontend: React + Vite + Material UI
+- Payments: Razorpay (test mode)
+- Currency: INR (Indian Rupees)
+
+## What changed
+
+This project is now fashion-specific (not general-purpose ecommerce):
+
+- Clothing catalog with fields like `gender`, `sizes`, `colors`, `material`, `fit`
+- Material UI based storefront with a styled theme
+- Advanced filters: search, category, gender, size, color, price range, sorting
+- Product detail variant selection (size + color)
+- Cart stores variants as separate line items
 
 ## Project structure
 
 - `server/` Express API and MongoDB models
-- `client/` React storefront/admin UI
+- `client/` React + MUI storefront/admin UI
 - `package.json` root workspace scripts
-
-## Features
-
-- User registration/login with JWT
-- Product listing + search/filter
-- Product details and add-to-cart
-- Cart persisted in localStorage
-- Checkout with shipping address
-- Razorpay integration (test mode) with signature verification
-- Order creation and "My Orders" tracking
-- Admin product create/delete APIs and UI
-- Seed script for sample products + admin account
-- Prices are stored and displayed in INR (Indian Rupees)
-
-## Prerequisites
-
-- Node.js 18+
-- MongoDB running locally (or update `MONGO_URI`)
 
 ## Setup
 
@@ -39,14 +32,14 @@ A full-stack ecommerce starter built with:
 2. Create env files:
    - Copy `server/.env.example` to `server/.env`
    - Copy `client/.env.example` to `client/.env`
-   - Add Razorpay test keys in `server/.env`:
-     - `RAZORPAY_KEY_ID=rzp_test_...`
-     - `RAZORPAY_KEY_SECRET=...`
-3. Seed data (optional but recommended):
+3. Add Razorpay test keys in `server/.env`:
+   - `RAZORPAY_KEY_ID=rzp_test_...`
+   - `RAZORPAY_KEY_SECRET=...`
+4. Seed clothing catalog:
    ```bash
    npm run seed
    ```
-4. Start frontend + backend together:
+5. Start frontend + backend:
    ```bash
    npm run dev
    ```
@@ -64,7 +57,7 @@ A full-stack ecommerce starter built with:
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me` (protected)
-- `GET /api/products`
+- `GET /api/products` (supports search + clothing filters)
 - `GET /api/products/:id`
 - `POST /api/products` (admin)
 - `PUT /api/products/:id` (admin)
@@ -77,7 +70,5 @@ A full-stack ecommerce starter built with:
 
 ## Notes
 
-- Cart state is managed client-side and synced to localStorage.
-- Razorpay is set up for test mode. Use test keys from your Razorpay Dashboard.
-- UI currency formatting uses `en-IN` locale and INR symbol.
-- This is a solid foundation; next common additions are image uploads and order status management workflows.
+- Prices are stored/displayed in INR.
+- If you previously seeded older products, run `npm run seed` again to load the new clothing dataset.

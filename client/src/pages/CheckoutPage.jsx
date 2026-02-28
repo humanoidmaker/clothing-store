@@ -1,5 +1,23 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Divider,
+  FormControl,
+  Grid,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography
+} from '@mui/material';
+import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -54,7 +72,12 @@ const CheckoutPage = () => {
 
     try {
       const payload = {
-        items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        items: items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          selectedSize: item.selectedSize,
+          selectedColor: item.selectedColor
+        })),
         shippingAddress: form
       };
 
@@ -80,8 +103,8 @@ const CheckoutPage = () => {
           key: data.keyId,
           amount: data.amount,
           currency: data.currency,
-          name: 'HumanoidMaker',
-          description: 'Robotics order payment',
+          name: 'Astra Attire',
+          description: 'Fashion order payment',
           order_id: data.orderId,
           handler: (response) => resolve(response),
           prefill: {
@@ -89,7 +112,7 @@ const CheckoutPage = () => {
             email: user?.email || ''
           },
           theme: {
-            color: '#0f5c4b'
+            color: '#1f3a5f'
           },
           modal: {
             ondismiss: () => reject(new Error('Payment cancelled'))
@@ -117,80 +140,112 @@ const CheckoutPage = () => {
 
   if (!canCheckout) {
     return (
-      <div className="empty">
-        Cart is empty. <Link to="/">Shop products</Link>
-      </div>
+      <Alert severity="info" sx={{ borderRadius: 3 }}>
+        Cart is empty. <RouterLink to="/">Shop styles</RouterLink>
+      </Alert>
     );
   }
 
   return (
-    <section className="checkout-layout">
-      <form className="card form-stack" onSubmit={onSubmit}>
-        <h1>Checkout</h1>
+    <Box>
+      <Typography variant="h4" sx={{ mb: 2 }}>
+        Checkout
+      </Typography>
 
-        <div className="form-grid">
-          <div>
-            <label htmlFor="paymentMethod">Payment Method</label>
-            <select
-              id="paymentMethod"
-              name="paymentMethod"
-              value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value)}
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2.2} alignItems="flex-start">
+        <Card sx={{ borderRadius: 3, width: '100%', flex: 1 }}>
+          <CardContent component="form" onSubmit={onSubmit}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Shipping & Payment
+            </Typography>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="payment-method-label">Payment Method</InputLabel>
+                  <Select
+                    labelId="payment-method-label"
+                    value={paymentMethod}
+                    label="Payment Method"
+                    onChange={(event) => setPaymentMethod(event.target.value)}
+                  >
+                    <MenuItem value="Razorpay">Razorpay (Test)</MenuItem>
+                    <MenuItem value="Cash on Delivery">Cash on Delivery</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth name="street" label="Street" value={form.street} onChange={onChange} required />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth name="city" label="City" value={form.city} onChange={onChange} required />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth name="state" label="State" value={form.state} onChange={onChange} required />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="postalCode"
+                  label="Postal Code"
+                  value={form.postalCode}
+                  onChange={onChange}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth name="country" label="Country" value={form.country} onChange={onChange} required />
+              </Grid>
+            </Grid>
+
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {error}
+              </Alert>
+            )}
+
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              sx={{ mt: 2 }}
+              startIcon={paymentMethod === 'Razorpay' ? <CreditCardOutlinedIcon /> : <LocalShippingOutlinedIcon />}
+              disabled={submitting}
             >
-              <option value="Razorpay">Razorpay (Test Mode)</option>
-              <option value="Cash on Delivery">Cash on Delivery</option>
-            </select>
-          </div>
+              {submitting ? 'Processing...' : paymentMethod === 'Razorpay' ? 'Pay with Razorpay' : 'Place Order'}
+            </Button>
+          </CardContent>
+        </Card>
 
-          <div>
-            <label htmlFor="street">Street</label>
-            <input id="street" name="street" value={form.street} onChange={onChange} required />
-          </div>
+        <Card sx={{ width: { xs: '100%', lg: 380 }, borderRadius: 3, position: { lg: 'sticky' }, top: { lg: 96 } }}>
+          <CardContent>
+            <Typography variant="h6">Order Review</Typography>
+            <Divider sx={{ my: 1.5 }} />
 
-          <div>
-            <label htmlFor="city">City</label>
-            <input id="city" name="city" value={form.city} onChange={onChange} required />
-          </div>
+            <Stack spacing={1.2}>
+              {items.map((item) => (
+                <Box key={item.cartKey}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {item.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {item.quantity} x {formatINR(item.price)}
+                    {item.selectedSize ? ` | Size ${item.selectedSize}` : ''}
+                    {item.selectedColor ? ` | ${item.selectedColor}` : ''}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
 
-          <div>
-            <label htmlFor="state">State</label>
-            <input id="state" name="state" value={form.state} onChange={onChange} required />
-          </div>
-
-          <div>
-            <label htmlFor="postalCode">Postal code</label>
-            <input id="postalCode" name="postalCode" value={form.postalCode} onChange={onChange} required />
-          </div>
-
-          <div>
-            <label htmlFor="country">Country</label>
-            <input id="country" name="country" value={form.country} onChange={onChange} required />
-          </div>
-        </div>
-
-        {error && <p className="error">{error}</p>}
-
-        <button className="btn btn-primary" type="submit" disabled={submitting}>
-          {submitting ? 'Processing...' : paymentMethod === 'Razorpay' ? 'Pay with Razorpay' : 'Place order'}
-        </button>
-      </form>
-
-      <aside className="card summary-card">
-        <h2>Order Review</h2>
-        <ul className="review-list">
-          {items.map((item) => (
-            <li key={item.productId}>
-              <span>{item.name}</span>
-              <span>
-                {item.quantity} x {formatINR(item.price)}
-              </span>
-            </li>
-          ))}
-        </ul>
-
-        <p className="summary-total">{formatINR(subtotal)}</p>
-      </aside>
-    </section>
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="h4" color="primary">
+              {formatINR(subtotal)}
+            </Typography>
+          </CardContent>
+        </Card>
+      </Stack>
+    </Box>
   );
 };
 
