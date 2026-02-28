@@ -136,7 +136,9 @@ const getProducts = async (req, res) => {
     availability,
     minPrice,
     maxPrice,
-    sort = 'newest'
+    sort = 'newest',
+    page: pageQuery = '1',
+    limit: limitQuery = '12'
   } = req.query;
 
   const filters = {};
@@ -214,8 +216,30 @@ const getProducts = async (req, res) => {
     rating: { rating: -1, numReviews: -1 }
   };
 
-  const products = await Product.find(filters).sort(sortBy[sort] || sortBy.newest);
-  return res.json(products);
+  const parsedPage = Number.parseInt(pageQuery, 10);
+  const parsedLimit = Number.parseInt(limitQuery, 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 12;
+
+  const totalItems = await Product.countDocuments(filters);
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const currentPage = Math.min(page, totalPages);
+  const skip = (currentPage - 1) * limit;
+
+  const products = await Product.find(filters)
+    .sort(sortBy[sort] || sortBy.newest)
+    .skip(skip)
+    .limit(limit);
+
+  return res.json({
+    products,
+    page: currentPage,
+    limit,
+    totalItems,
+    totalPages,
+    hasNextPage: currentPage < totalPages,
+    hasPrevPage: currentPage > 1
+  });
 };
 
 const getProductFilterOptions = async (req, res) => {

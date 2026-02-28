@@ -36,7 +36,6 @@ import PageHeader from '../components/PageHeader';
 import HtmlEditorField from '../components/HtmlEditorField';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
-import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const defaultCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
@@ -170,27 +169,44 @@ const AdminProductsPage = () => {
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState('');
-  const {
-    page,
-    rowsPerPage,
-    totalItems,
-    totalPages,
-    paginatedItems,
-    setPage,
-    setRowsPerPage
-  } = usePaginationState(products, 10);
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [catalogOptions, setCatalogOptions] = useState({
+    categories: defaultCategoryOptions,
+    genders: defaultGenderOptions,
+    brands: []
+  });
 
   const categoryOptions = useMemo(() => {
-    return [...new Set([...defaultCategoryOptions, ...products.map((product) => String(product.category || '').trim()).filter(Boolean)])];
-  }, [products]);
+    return [
+      ...new Set([
+        ...defaultCategoryOptions,
+        ...(Array.isArray(catalogOptions.categories) ? catalogOptions.categories : []),
+        ...products.map((product) => String(product.category || '').trim()).filter(Boolean)
+      ])
+    ];
+  }, [catalogOptions.categories, products]);
 
   const genderOptions = useMemo(() => {
-    return [...new Set([...defaultGenderOptions, ...products.map((product) => String(product.gender || '').trim()).filter(Boolean)])];
-  }, [products]);
+    return [
+      ...new Set([
+        ...defaultGenderOptions,
+        ...(Array.isArray(catalogOptions.genders) ? catalogOptions.genders : []),
+        ...products.map((product) => String(product.gender || '').trim()).filter(Boolean)
+      ])
+    ];
+  }, [catalogOptions.genders, products]);
 
   const brandOptions = useMemo(() => {
-    return [...new Set(products.map((product) => String(product.brand || '').trim()).filter(Boolean))];
-  }, [products]);
+    return [
+      ...new Set([
+        ...(Array.isArray(catalogOptions.brands) ? catalogOptions.brands : []),
+        ...products.map((product) => String(product.brand || '').trim()).filter(Boolean)
+      ])
+    ];
+  }, [catalogOptions.brands, products]);
 
   const resetForm = () => {
     setForm(initialForm);
@@ -212,23 +228,69 @@ const AdminProductsPage = () => {
     resetForm();
   };
 
-  const fetchProducts = async () => {
+  const fetchCatalogOptions = async () => {
+    try {
+      const { data } = await api.get('/products/filters');
+      setCatalogOptions({
+        categories: Array.isArray(data?.categories) && data.categories.length > 0 ? data.categories : defaultCategoryOptions,
+        genders: Array.isArray(data?.genders) && data.genders.length > 0 ? data.genders : defaultGenderOptions,
+        brands: Array.isArray(data?.brands) ? data.brands : []
+      });
+    } catch {
+      setCatalogOptions({
+        categories: defaultCategoryOptions,
+        genders: defaultGenderOptions,
+        brands: []
+      });
+    }
+  };
+
+  const fetchProducts = async (targetPage = page, targetRowsPerPage = rowsPerPage) => {
     setLoadingProducts(true);
     setError('');
 
     try {
-      const { data } = await api.get('/products');
-      setProducts(data);
+      const { data } = await api.get('/products', {
+        params: {
+          sort: 'newest',
+          page: targetPage,
+          limit: targetRowsPerPage
+        }
+      });
+
+      const nextProducts = Array.isArray(data?.products) ? data.products : [];
+      const nextTotalItems = Number(data?.totalItems);
+      const nextTotalPages = Number(data?.totalPages);
+      const nextPage = Number(data?.page);
+
+      setProducts(nextProducts);
+      setTotalItems(Number.isFinite(nextTotalItems) && nextTotalItems >= 0 ? nextTotalItems : nextProducts.length);
+      setTotalPages(Number.isFinite(nextTotalPages) && nextTotalPages > 0 ? nextTotalPages : 1);
+      if (Number.isFinite(nextPage) && nextPage > 0 && nextPage !== targetPage) {
+        setPage(nextPage);
+      }
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to load products');
+      setProducts([]);
+      setTotalItems(0);
+      setTotalPages(1);
     } finally {
       setLoadingProducts(false);
     }
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchCatalogOptions();
   }, []);
+
+  useEffect(() => {
+    fetchProducts(page, rowsPerPage);
+  }, [page, rowsPerPage]);
+
+  const onRowsPerPageChange = (nextRowsPerPage) => {
+    setRowsPerPage(nextRowsPerPage);
+    setPage(1);
+  };
 
   const onFieldChange = (event) => {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
@@ -373,6 +435,7 @@ const AdminProductsPage = () => {
 
       setFormDialogOpen(false);
       resetForm();
+      await fetchCatalogOptions();
       await fetchProducts();
     } catch (requestError) {
       setError(requestError.response?.data?.message || requestError.message || 'Failed to save product');
@@ -401,11 +464,12 @@ const AdminProductsPage = () => {
 
     try {
       await api.delete(`/products/${id}`);
-      setProducts((current) => current.filter((item) => item._id !== id));
       if (editingProductId === id) {
         setFormDialogOpen(false);
         resetForm();
       }
+      await fetchCatalogOptions();
+      await fetchProducts();
       setSuccess('Product deleted');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to delete product');
@@ -422,7 +486,7 @@ const AdminProductsPage = () => {
         subtitle="Upload multiple product images and variant image galleries."
         actions={
           <Stack direction="row" spacing={0.7}>
-            <Chip size="small" label={`Total Products: ${products.length}`} />
+            <Chip size="small" label={`Total Products: ${totalItems}`} />
             <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateDialog}>
               Create Product
             </Button>
@@ -464,7 +528,7 @@ const AdminProductsPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {paginatedItems.map((product) => (
+                {products.map((product) => (
                   <TableRow key={product._id} hover>
                     <TableCell>{product.name}</TableCell>
                     <TableCell>{product.category}</TableCell>
@@ -510,7 +574,7 @@ const AdminProductsPage = () => {
               totalPages={totalPages}
               rowsPerPage={rowsPerPage}
               onPageChange={setPage}
-              onRowsPerPageChange={setRowsPerPage}
+              onRowsPerPageChange={onRowsPerPageChange}
               pageSizeOptions={[5, 10, 20, 30]}
             />
           )}

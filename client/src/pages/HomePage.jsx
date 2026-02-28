@@ -22,7 +22,6 @@ import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
-import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const defaultPriceRange = [500, 8000];
@@ -72,19 +71,14 @@ const HomePage = () => {
   const [filters, setFilters] = useState(() => createInitialFilters(defaultPriceRange));
   const [appliedFilters, setAppliedFilters] = useState(() => createInitialFilters(defaultPriceRange));
   const [filterOptions, setFilterOptions] = useState(fallbackFilterOptions);
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(9);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [priceBounds, setPriceBounds] = useState({
     min: defaultPriceRange[0],
     max: defaultPriceRange[1]
   });
-  const {
-    page,
-    rowsPerPage,
-    totalItems,
-    totalPages,
-    paginatedItems,
-    setPage,
-    setRowsPerPage
-  } = usePaginationState(products, 9);
 
   const navbarSearch = useMemo(() => String(searchParams.get('q') || '').trim(), [searchParams]);
 
@@ -124,6 +118,7 @@ const HomePage = () => {
   useEffect(() => {
     setFilters((current) => (current.search === navbarSearch ? current : { ...current, search: navbarSearch }));
     setAppliedFilters((current) => (current.search === navbarSearch ? current : { ...current, search: navbarSearch }));
+    setPage(1);
   }, [navbarSearch]);
 
   useEffect(() => {
@@ -135,7 +130,9 @@ const HomePage = () => {
         const params = {
           minPrice: appliedFilters.priceRange[0],
           maxPrice: appliedFilters.priceRange[1],
-          sort: appliedFilters.sort
+          sort: appliedFilters.sort,
+          page,
+          limit: rowsPerPage
         };
 
         if (appliedFilters.search.trim()) params.search = appliedFilters.search.trim();
@@ -149,16 +146,29 @@ const HomePage = () => {
         if (appliedFilters.availability !== 'all') params.availability = appliedFilters.availability;
 
         const { data } = await api.get('/products', { params });
-        setProducts(data);
+        const nextProducts = Array.isArray(data?.products) ? data.products : [];
+        const nextTotalItems = Number(data?.totalItems);
+        const nextTotalPages = Number(data?.totalPages);
+        const nextPage = Number(data?.page);
+
+        setProducts(nextProducts);
+        setTotalItems(Number.isFinite(nextTotalItems) && nextTotalItems >= 0 ? nextTotalItems : nextProducts.length);
+        setTotalPages(Number.isFinite(nextTotalPages) && nextTotalPages > 0 ? nextTotalPages : 1);
+        if (Number.isFinite(nextPage) && nextPage > 0 && nextPage !== page) {
+          setPage(nextPage);
+        }
       } catch (requestError) {
         setError(requestError.response?.data?.message || 'Failed to load clothing products');
+        setProducts([]);
+        setTotalItems(0);
+        setTotalPages(1);
       } finally {
         setLoading(false);
       }
     };
 
     fetchProducts();
-  }, [appliedFilters]);
+  }, [appliedFilters, page, rowsPerPage]);
 
   const hasAdvancedFilters =
     Boolean(appliedFilters.search.trim()) ||
@@ -175,14 +185,15 @@ const HomePage = () => {
     appliedFilters.sort !== 'newest';
 
   const heading = useMemo(() => {
-    if (products.length === 0) return 'No Styles Found';
+    if (totalItems === 0) return 'No Styles Found';
     if (hasAdvancedFilters) return 'Filtered Styles';
     return 'All Products';
-  }, [products.length, hasAdvancedFilters]);
+  }, [totalItems, hasAdvancedFilters]);
 
   const applyFilters = () => {
     const next = { ...filters, search: filters.search.trim() };
     setAppliedFilters(next);
+    setPage(1);
 
     const nextParams = new URLSearchParams(searchParams);
     if (next.search) nextParams.set('q', next.search);
@@ -197,6 +208,12 @@ const HomePage = () => {
     setSearchParams(nextParams, { replace: true });
     setFilters(resetTo);
     setAppliedFilters(resetTo);
+    setPage(1);
+  };
+
+  const onRowsPerPageChange = (nextRowsPerPage) => {
+    setRowsPerPage(nextRowsPerPage);
+    setPage(1);
   };
 
   return (
@@ -456,7 +473,7 @@ const HomePage = () => {
                   }
                 }}
               >
-                {paginatedItems.map((product) => (
+                {products.map((product) => (
                   <Box key={product._id}>
                     <ProductCard product={product} />
                   </Box>
@@ -469,7 +486,7 @@ const HomePage = () => {
                 totalPages={totalPages}
                 rowsPerPage={rowsPerPage}
                 onPageChange={setPage}
-                onRowsPerPageChange={setRowsPerPage}
+                onRowsPerPageChange={onRowsPerPageChange}
                 pageSizeOptions={[6, 9, 12, 18]}
               />
             </>
