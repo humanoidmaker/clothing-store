@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../api';
+import { defaultThemeSettings, normalizeThemeSettings } from '../theme';
 
 const StoreSettingsContext = createContext(null);
 const defaultStoreName = 'Astra Attire';
@@ -11,67 +12,83 @@ const normalizeFooterText = (value) => String(value || '').trim() || defaultFoot
 export const StoreSettingsProvider = ({ children }) => {
   const [storeName, setStoreName] = useState(defaultStoreName);
   const [footerText, setFooterText] = useState(defaultFooterText);
+  const [themeSettings, setThemeSettings] = useState(defaultThemeSettings);
   const [loading, setLoading] = useState(true);
+
+  const applySettingsFromResponse = useCallback((data) => {
+    const nextStoreName = normalizeStoreName(data?.storeName);
+    const nextFooterText = normalizeFooterText(data?.footerText);
+    const nextThemeSettings = normalizeThemeSettings(data?.theme || {});
+
+    setStoreName(nextStoreName);
+    setFooterText(nextFooterText);
+    setThemeSettings(nextThemeSettings);
+
+    return {
+      storeName: nextStoreName,
+      footerText: nextFooterText,
+      theme: nextThemeSettings
+    };
+  }, []);
 
   const refreshSettings = useCallback(async () => {
     try {
       const { data } = await api.get('/settings');
-      setStoreName(normalizeStoreName(data?.storeName));
-      setFooterText(normalizeFooterText(data?.footerText));
+      applySettingsFromResponse(data);
     } catch {
       setStoreName((current) => current || defaultStoreName);
       setFooterText((current) => current || defaultFooterText);
+      setThemeSettings((current) => normalizeThemeSettings(current || defaultThemeSettings));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applySettingsFromResponse]);
 
   useEffect(() => {
     refreshSettings();
   }, [refreshSettings]);
 
-  const updateStoreSettings = useCallback(async ({ storeName: nextStoreName, footerText: nextFooterText }) => {
-    const payload = {};
+  const updateStoreSettings = useCallback(
+    async ({ storeName: nextStoreName, footerText: nextFooterText, theme: nextTheme } = {}) => {
+      const payload = {};
 
-    if (nextStoreName !== undefined) {
-      payload.storeName = String(nextStoreName || '').trim();
-    }
+      if (nextStoreName !== undefined) {
+        payload.storeName = String(nextStoreName || '').trim();
+      }
 
-    if (nextFooterText !== undefined) {
-      payload.footerText = String(nextFooterText || '').trim();
-    }
+      if (nextFooterText !== undefined) {
+        payload.footerText = String(nextFooterText || '').trim();
+      }
 
-    const { data } = await api.put('/settings', payload);
-    const updatedStoreName = normalizeStoreName(data?.storeName);
-    const updatedFooterText = normalizeFooterText(data?.footerText);
+      if (nextTheme !== undefined) {
+        payload.theme = normalizeThemeSettings(nextTheme);
+      }
 
-    setStoreName(updatedStoreName);
-    setFooterText(updatedFooterText);
-
-    return {
-      storeName: updatedStoreName,
-      footerText: updatedFooterText
-    };
-  }, []);
+      const { data } = await api.put('/settings', payload);
+      return applySettingsFromResponse(data);
+    },
+    [applySettingsFromResponse]
+  );
 
   const updateStoreName = useCallback(
     async (nextStoreName) => {
-      const updated = await updateStoreSettings({ storeName: nextStoreName, footerText });
+      const updated = await updateStoreSettings({ storeName: nextStoreName });
       return updated.storeName;
     },
-    [updateStoreSettings, footerText]
+    [updateStoreSettings]
   );
 
   const value = useMemo(
     () => ({
       storeName,
       footerText,
+      themeSettings,
       loading,
       refreshSettings,
       updateStoreName,
       updateStoreSettings
     }),
-    [storeName, footerText, loading, refreshSettings, updateStoreName, updateStoreSettings]
+    [storeName, footerText, themeSettings, loading, refreshSettings, updateStoreName, updateStoreSettings]
   );
 
   return <StoreSettingsContext.Provider value={value}>{children}</StoreSettingsContext.Provider>;

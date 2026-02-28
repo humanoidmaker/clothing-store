@@ -6,6 +6,8 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  Divider,
+  MenuItem,
   Stack,
   TextField,
   Typography
@@ -13,11 +15,30 @@ import {
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import PageHeader from '../components/PageHeader';
 import { useStoreSettings } from '../context/StoreSettingsContext';
+import { defaultThemeSettings, fontFamilyOptions, normalizeThemeSettings } from '../theme';
+
+const colorFieldItems = [
+  { key: 'primaryColor', label: 'Primary Color' },
+  { key: 'secondaryColor', label: 'Secondary Color' },
+  { key: 'backgroundDefault', label: 'Background Color' },
+  { key: 'backgroundPaper', label: 'Surface Color' },
+  { key: 'textPrimary', label: 'Primary Text Color' },
+  { key: 'textSecondary', label: 'Secondary Text Color' }
+];
+
+const colorInputSx = {
+  '& input': {
+    cursor: 'pointer',
+    p: '6px !important',
+    height: 34
+  }
+};
 
 const AdminSettingsPage = () => {
-  const { storeName, footerText, updateStoreSettings } = useStoreSettings();
+  const { storeName, footerText, themeSettings, updateStoreSettings } = useStoreSettings();
   const [nameDraft, setNameDraft] = useState(storeName);
   const [footerTextDraft, setFooterTextDraft] = useState(footerText);
+  const [themeDraft, setThemeDraft] = useState(() => normalizeThemeSettings(themeSettings));
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
@@ -25,7 +46,19 @@ const AdminSettingsPage = () => {
   useEffect(() => {
     setNameDraft(storeName);
     setFooterTextDraft(footerText);
-  }, [storeName, footerText]);
+    setThemeDraft(normalizeThemeSettings(themeSettings));
+  }, [storeName, footerText, themeSettings]);
+
+  const onThemeFieldChange = (field, value) => {
+    setThemeDraft((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const onResetTheme = () => {
+    setThemeDraft(defaultThemeSettings);
+  };
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -36,7 +69,8 @@ const AdminSettingsPage = () => {
     try {
       const updatedSettings = await updateStoreSettings({
         storeName: nameDraft,
-        footerText: footerTextDraft
+        footerText: footerTextDraft,
+        theme: themeDraft
       });
       setSuccess(`Settings updated. Store name: "${updatedSettings.storeName}"`);
     } catch (requestError) {
@@ -51,7 +85,7 @@ const AdminSettingsPage = () => {
       <PageHeader
         eyebrow="Admin"
         title="Store Settings"
-        subtitle="Update global store details that should reflect across the website."
+        subtitle="Update global branding and full website theme (colors + fonts)."
       />
 
       {(error || success) && (
@@ -63,32 +97,90 @@ const AdminSettingsPage = () => {
 
       <Card>
         <CardContent component="form" onSubmit={onSubmit} sx={{ p: 1.2 }}>
-          <Stack spacing={1.2} sx={{ maxWidth: 520 }}>
+          <Stack spacing={1.2}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Branding
             </Typography>
 
-            <TextField
-              label="Store Name"
-              size="small"
-              value={nameDraft}
-              onChange={(event) => setNameDraft(event.target.value)}
-              required
-              inputProps={{ maxLength: 80 }}
-              helperText="Shown in navbar, auth pages, checkout and invoice."
-            />
+            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' } }}>
+              <TextField
+                label="Store Name"
+                size="small"
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                required
+                inputProps={{ maxLength: 80 }}
+                helperText="Shown in navbar, auth pages, checkout and invoice."
+              />
 
-            <TextField
-              label="Footer Text"
-              size="small"
-              value={footerTextDraft}
-              onChange={(event) => setFooterTextDraft(event.target.value)}
-              required
-              multiline
-              minRows={2}
-              inputProps={{ maxLength: 220 }}
-              helperText="Shown at the bottom-right of the website footer."
-            />
+              <TextField
+                label="Footer Text"
+                size="small"
+                value={footerTextDraft}
+                onChange={(event) => setFooterTextDraft(event.target.value)}
+                required
+                multiline
+                minRows={2}
+                inputProps={{ maxLength: 220 }}
+                helperText="Shown at the bottom-right of website footer."
+              />
+            </Box>
+
+            <Divider />
+
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                Theme
+              </Typography>
+              <Button type="button" size="small" variant="outlined" onClick={onResetTheme}>
+                Reset Theme
+              </Button>
+            </Stack>
+
+            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' } }}>
+              {colorFieldItems.map((item) => (
+                <TextField
+                  key={item.key}
+                  type="color"
+                  size="small"
+                  label={item.label}
+                  value={themeDraft[item.key]}
+                  onChange={(event) => onThemeFieldChange(item.key, event.target.value)}
+                  sx={colorInputSx}
+                  helperText={themeDraft[item.key]}
+                />
+              ))}
+            </Box>
+
+            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' } }}>
+              <TextField
+                select
+                label="Body Font"
+                size="small"
+                value={themeDraft.bodyFontFamily}
+                onChange={(event) => onThemeFieldChange('bodyFontFamily', event.target.value)}
+              >
+                {fontFamilyOptions.map((font) => (
+                  <MenuItem key={font.value} value={font.value} sx={{ fontFamily: font.css }}>
+                    {font.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                select
+                label="Heading Font"
+                size="small"
+                value={themeDraft.headingFontFamily}
+                onChange={(event) => onThemeFieldChange('headingFontFamily', event.target.value)}
+              >
+                {fontFamilyOptions.map((font) => (
+                  <MenuItem key={font.value} value={font.value} sx={{ fontFamily: font.css }}>
+                    {font.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
 
             <Stack direction="row" spacing={0.8}>
               <Button
