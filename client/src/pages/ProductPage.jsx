@@ -14,9 +14,14 @@ import {
   Typography
 } from '@mui/material';
 import AddShoppingCartOutlinedIcon from '@mui/icons-material/AddShoppingCartOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import FacebookOutlinedIcon from '@mui/icons-material/FacebookOutlined';
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
+import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
+import TelegramIcon from '@mui/icons-material/Telegram';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink, useParams } from 'react-router-dom';
@@ -26,6 +31,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { formatINR } from '../utils/currency';
 
 const placeholderImage = 'https://placehold.co/900x1200?text=Product';
+const stripHtml = (value) => String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -39,6 +45,7 @@ const ProductPage = () => {
   const [activeImage, setActiveImage] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [shareFeedback, setShareFeedback] = useState('');
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -191,6 +198,54 @@ const ProductPage = () => {
   const selectedPrice = Number(selectedVariant?.price ?? product?.price ?? 0);
   const availableStock = Number(selectedVariant?.stock ?? product?.countInStock ?? 0);
   const maxQty = Math.max(1, availableStock || 1);
+  const productUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const shareTitle = product?.seo?.title || product?.seo?.ogTitle || product?.name || '';
+  const shareDescription = (
+    product?.seo?.description ||
+    product?.seo?.ogDescription ||
+    stripHtml(product?.description || '')
+  ).slice(0, 280);
+  const encodedUrl = encodeURIComponent(productUrl);
+  const encodedText = encodeURIComponent(`${shareTitle}${shareDescription ? ` - ${shareDescription}` : ''}`);
+
+  const setTemporaryFeedback = (message) => {
+    setShareFeedback(message);
+    window.setTimeout(() => {
+      setShareFeedback('');
+    }, 2500);
+  };
+
+  const onCopyLink = async () => {
+    if (!productUrl) return;
+    try {
+      await navigator.clipboard.writeText(productUrl);
+      setTemporaryFeedback('Link copied. Share in Instagram DM/story or any app.');
+    } catch {
+      setTemporaryFeedback('Unable to copy link.');
+    }
+  };
+
+  const onNativeShare = async () => {
+    if (!navigator.share || !productUrl) {
+      onCopyLink();
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: shareTitle,
+        text: shareDescription,
+        url: productUrl
+      });
+    } catch {
+      // ignore cancellation
+    }
+  };
+
+  const openShareWindow = (url) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   if (loading) {
     return (
@@ -436,6 +491,48 @@ const ProductPage = () => {
                 <Button component={RouterLink} to="/cart" variant="outlined" startIcon={<ShoppingBagOutlinedIcon />}>
                   View Bag
                 </Button>
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={0.8}>
+                <Typography variant="subtitle2">Share This Product</Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8} flexWrap="wrap" useFlexGap>
+                  <Button variant="outlined" startIcon={<ShareOutlinedIcon />} onClick={onNativeShare}>
+                    Share
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<WhatsAppIcon />}
+                    onClick={() => openShareWindow(`https://wa.me/?text=${encodedText}%20${encodedUrl}`)}
+                  >
+                    WhatsApp
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<FacebookOutlinedIcon />}
+                    onClick={() => openShareWindow(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`)}
+                  >
+                    Facebook
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => openShareWindow(`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`)}
+                  >
+                    X
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<TelegramIcon />}
+                    onClick={() => openShareWindow(`https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`)}
+                  >
+                    Telegram
+                  </Button>
+                  <Button variant="outlined" startIcon={<ContentCopyOutlinedIcon />} onClick={onCopyLink}>
+                    Copy Link (Instagram)
+                  </Button>
+                </Stack>
+                {shareFeedback ? <Alert severity="success">{shareFeedback}</Alert> : null}
               </Stack>
             </Stack>
           </Box>

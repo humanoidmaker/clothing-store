@@ -85,4 +85,5 @@ const storeSettingsSchema = new mongoose.Schema(
 
 storeSettingsSchema.statics.defaultThemeSettings = defaultThemeSettings;
 
-module.exports = mongoose.model('StoreSettings', storeSettingsSchema);
+module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
+

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { defaultSeoMeta } = require('../utils/seo');
 
 const variantSchema = new mongoose.Schema(
   {
@@ -100,6 +101,25 @@ const productSchema = new mongoose.Schema(
       min: 0,
       default: 0
     },
+    seo: {
+      title: { type: String, trim: true, default: defaultSeoMeta.title, maxlength: 120 },
+      description: { type: String, trim: true, default: defaultSeoMeta.description, maxlength: 320 },
+      keywords: { type: String, trim: true, default: defaultSeoMeta.keywords, maxlength: 320 },
+      canonicalUrl: { type: String, trim: true, default: defaultSeoMeta.canonicalUrl, maxlength: 500 },
+      robots: { type: String, trim: true, default: defaultSeoMeta.robots, maxlength: 220 },
+      ogTitle: { type: String, trim: true, default: defaultSeoMeta.ogTitle, maxlength: 120 },
+      ogDescription: { type: String, trim: true, default: defaultSeoMeta.ogDescription, maxlength: 320 },
+      ogImage: { type: String, trim: true, default: defaultSeoMeta.ogImage, maxlength: 1000 },
+      ogImageAlt: { type: String, trim: true, default: defaultSeoMeta.ogImageAlt, maxlength: 420 },
+      ogType: { type: String, trim: true, default: defaultSeoMeta.ogType, maxlength: 60 },
+      twitterCard: { type: String, trim: true, default: defaultSeoMeta.twitterCard, maxlength: 40 },
+      twitterTitle: { type: String, trim: true, default: defaultSeoMeta.twitterTitle, maxlength: 120 },
+      twitterDescription: { type: String, trim: true, default: defaultSeoMeta.twitterDescription, maxlength: 200 },
+      twitterImage: { type: String, trim: true, default: defaultSeoMeta.twitterImage, maxlength: 1000 },
+      twitterImageAlt: { type: String, trim: true, default: defaultSeoMeta.twitterImageAlt, maxlength: 420 },
+      twitterSite: { type: String, trim: true, default: defaultSeoMeta.twitterSite, maxlength: 30 },
+      twitterCreator: { type: String, trim: true, default: defaultSeoMeta.twitterCreator, maxlength: 30 }
+    },
     countInStock: {
       type: Number,
       required: true,
@@ -123,4 +143,5 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('Product', productSchema);
+module.exports = mongoose.models.Product || mongoose.model('Product', productSchema);
+

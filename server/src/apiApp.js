@@ -8,6 +8,7 @@ const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const seoRoutes = require('./routes/seoRoutes');
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -30,6 +31,7 @@ apiApp.use('/auth', authRoutes);
 apiApp.use('/products', productRoutes);
 apiApp.use('/orders', orderRoutes);
 apiApp.use('/settings', settingsRoutes);
+apiApp.use('/seo', seoRoutes);
 
 apiApp.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });

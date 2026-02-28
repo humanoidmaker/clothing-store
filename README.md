@@ -15,6 +15,7 @@ A clothing-focused ecommerce app migrated to a Next.js-hosted runtime while pres
 
 - Storefront product catalog, filters, cart, wishlist, checkout, order history, invoice page
 - Admin products, orders, settings
+- Admin SEO manager for default tags, public pages, and product-specific tags
 - Admin business reporting with filters, charts, and cost-based profit/loss (using `purchasePrice`)
 - Variant pricing/stock/image support
 - Razorpay verification flow
@@ -71,9 +72,18 @@ A clothing-focused ecommerce app migrated to a Next.js-hosted runtime while pres
 - `GET /api/orders` (admin)
 - `GET /api/orders/reports/summary` (admin, supports report filters)
 - `PUT /api/orders/:id/status` (admin)
+- `GET /api/seo/admin` (admin)
+- `PUT /api/seo/defaults` (admin)
+- `PUT /api/seo/public-page` (admin)
+- `DELETE /api/seo/public-page/:key` (admin)
+- `GET /api/seo/products` (admin)
+- `GET /api/seo/products/:id` (admin)
+- `PUT /api/seo/products/:id` (admin)
 
 ## Notes
 
 - Product and variant forms include `purchasePrice` so reports calculate real cost-based profit/loss.
+- Product page includes sharing actions (native share, WhatsApp, Facebook, X, Telegram, copy link for Instagram) using URL-level OG/Twitter tags.
+- SEO metadata is server-rendered per route from admin-configurable SEO settings for better Google/social crawler compatibility.
 - Existing older orders without item `purchasePrice` use product fallback purchase pricing in reports.
 - If you seeded before purchase pricing support, re-run `npm run seed` to refresh sample cost data.
