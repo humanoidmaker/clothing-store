@@ -18,9 +18,12 @@ import {
 } from '@mui/material';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
+import { useSearchParams } from 'react-router-dom';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const defaultPriceRange = [500, 8000];
@@ -62,6 +65,7 @@ const fallbackFilterOptions = {
 };
 
 const HomePage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingFilterOptions, setLoadingFilterOptions] = useState(true);
@@ -73,6 +77,17 @@ const HomePage = () => {
     min: defaultPriceRange[0],
     max: defaultPriceRange[1]
   });
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(products, 9);
+
+  const navbarSearch = useMemo(() => String(searchParams.get('q') || '').trim(), [searchParams]);
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -106,6 +121,11 @@ const HomePage = () => {
 
     fetchFilterOptions();
   }, []);
+
+  useEffect(() => {
+    setFilters((current) => (current.search === navbarSearch ? current : { ...current, search: navbarSearch }));
+    setAppliedFilters((current) => (current.search === navbarSearch ? current : { ...current, search: navbarSearch }));
+  }, [navbarSearch]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -162,11 +182,20 @@ const HomePage = () => {
   }, [products.length, hasAdvancedFilters]);
 
   const applyFilters = () => {
-    setAppliedFilters(filters);
+    const next = { ...filters, search: filters.search.trim() };
+    setAppliedFilters(next);
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (next.search) nextParams.set('q', next.search);
+    else nextParams.delete('q');
+    setSearchParams(nextParams, { replace: true });
   };
 
   const resetFilters = () => {
     const resetTo = createInitialFilters([priceBounds.min, priceBounds.max]);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('q');
+    setSearchParams(nextParams, { replace: true });
     setFilters(resetTo);
     setAppliedFilters(resetTo);
   };
@@ -201,7 +230,7 @@ const HomePage = () => {
           <Stack direction="row" spacing={0.7} alignItems="center">
             {(loading || loadingFilterOptions) && <CircularProgress size={14} />}
             <Typography color="text.secondary">
-              {loading || loadingFilterOptions ? 'Loading items...' : `${products.length} items`}
+              {loading || loadingFilterOptions ? 'Loading items...' : `${totalItems} items`}
             </Typography>
           </Stack>
         }
@@ -424,23 +453,35 @@ const HomePage = () => {
           )}
 
           {!loading && !error && products.length > 0 && (
-            <Box
-              sx={{
-                display: 'grid',
-                gap: 1,
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: 'repeat(2, minmax(0, 1fr))',
-                  lg: 'repeat(3, minmax(0, 1fr))'
-                }
-              }}
-            >
-              {products.map((product) => (
-                <Box key={product._id}>
-                  <ProductCard product={product} />
-                </Box>
-              ))}
-            </Box>
+            <>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gap: 1,
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    sm: 'repeat(2, minmax(0, 1fr))',
+                    lg: 'repeat(3, minmax(0, 1fr))'
+                  }
+                }}
+              >
+                {paginatedItems.map((product) => (
+                  <Box key={product._id}>
+                    <ProductCard product={product} />
+                  </Box>
+                ))}
+              </Box>
+
+              <AppPagination
+                totalItems={totalItems}
+                page={page}
+                totalPages={totalPages}
+                rowsPerPage={rowsPerPage}
+                onPageChange={setPage}
+                onRowsPerPageChange={setRowsPerPage}
+                pageSizeOptions={[6, 9, 12, 18]}
+              />
+            </>
           )}
         </Box>
       </Box>

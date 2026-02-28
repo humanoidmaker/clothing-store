@@ -13,17 +13,28 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const CartPage = () => {
   const { items, subtotal, removeFromCart, updateQuantity } = useCart();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(items, 5);
 
   const proceedToCheckout = () => {
     if (items.length === 0) return;
@@ -54,7 +65,7 @@ const CartPage = () => {
           }}
         >
           <Stack spacing={1} sx={{ width: '100%', minWidth: 0 }}>
-            {items.map((item) => (
+            {paginatedItems.map((item) => (
               <Card key={item.cartKey}>
                 <CardContent sx={{ p: 1.1 }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ sm: 'center' }}>
@@ -107,6 +118,16 @@ const CartPage = () => {
                 </CardContent>
               </Card>
             ))}
+
+            <AppPagination
+              totalItems={totalItems}
+              page={page}
+              totalPages={totalPages}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={setRowsPerPage}
+              pageSizeOptions={[3, 5, 8, 10]}
+            />
           </Stack>
 
           <Card sx={{ width: '100%', position: { md: 'sticky' }, top: { md: 68 } }}>

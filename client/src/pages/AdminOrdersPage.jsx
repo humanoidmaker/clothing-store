@@ -18,7 +18,9 @@ import {
   Typography
 } from '@mui/material';
 import PageHeader from '../components/PageHeader';
+import AppPagination from '../components/AppPagination';
 import api from '../api';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const statusOptions = ['all', 'pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
@@ -85,6 +87,15 @@ const AdminOrdersPage = () => {
       return matchesId || matchesName || matchesEmail;
     });
   }, [orders, statusFilter, searchText]);
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(filteredOrders, 10);
 
   const countByStatus = useMemo(() => {
     return orders.reduce(
@@ -211,7 +222,7 @@ const AdminOrdersPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredOrders.map((order) => {
+                {paginatedItems.map((order) => {
                   const selectedStatus = orderStatusDrafts[order._id] || order.status;
                   const itemNames = (order.orderItems || [])
                     .slice(0, 2)
@@ -289,6 +300,18 @@ const AdminOrdersPage = () => {
                 })}
               </TableBody>
             </Table>
+          )}
+
+          {!loading && filteredOrders.length > 0 && (
+            <AppPagination
+              totalItems={totalItems}
+              page={page}
+              totalPages={totalPages}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={setRowsPerPage}
+              pageSizeOptions={[5, 10, 20, 30]}
+            />
           )}
         </CardContent>
       </Card>

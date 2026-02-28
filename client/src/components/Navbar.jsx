@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AppBar,
   Badge,
@@ -7,19 +7,22 @@ import {
   Container,
   Divider,
   Drawer,
+  InputAdornment,
   IconButton,
   List,
   ListItemButton,
   ListItemText,
   Stack,
+  TextField,
   Toolbar,
   Typography
 } from '@mui/material';
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
-import { Link as RouterLink, NavLink } from 'react-router-dom';
+import { Link as RouterLink, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -36,10 +39,13 @@ const navLinkSx = {
 };
 
 const Navbar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAdmin, logout } = useAuth();
   const { itemsCount: cartItemsCount } = useCart();
   const { itemsCount: wishlistItemsCount } = useWishlist();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
   const drawerLinks = useMemo(() => {
     const links = [
@@ -50,6 +56,25 @@ const Navbar = () => {
     if (isAdmin) links.push({ label: 'Admin', to: '/admin' });
     return links;
   }, [user, isAdmin]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('q') || '';
+    setSearchText(q);
+  }, [location.pathname, location.search]);
+
+  const onSearchSubmit = (event) => {
+    event.preventDefault();
+
+    const q = searchText.trim();
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+
+    navigate({
+      pathname: '/',
+      search: params.toString() ? `?${params.toString()}` : ''
+    });
+  };
 
   return (
     <>
@@ -70,7 +95,7 @@ const Navbar = () => {
               Astra Attire
             </Typography>
 
-            <Stack direction="row" spacing={0.4} sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1 }}>
+            <Stack direction="row" spacing={0.4} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1 }}>
               <Box component={NavLink} to="/" sx={navLinkSx}>
                 Shop
               </Box>
@@ -84,6 +109,29 @@ const Navbar = () => {
                   Admin
                 </Box>
               )}
+
+              <Box component="form" onSubmit={onSearchSubmit} sx={{ ml: 'auto', width: 320 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Search products..."
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  inputProps={{ 'aria-label': 'Search products' }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: 'rgba(255,255,255,0.96)'
+                    }
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlinedIcon fontSize="small" />
+                      </InputAdornment>
+                    )
+                  }}
+                />
+              </Box>
             </Stack>
 
             <Stack direction="row" spacing={0.4} alignItems="center" sx={{ ml: 'auto' }}>
@@ -131,6 +179,31 @@ const Navbar = () => {
               </IconButton>
             </Stack>
           </Toolbar>
+
+          <Box sx={{ display: { xs: 'block', md: 'none' }, pb: 0.8 }}>
+            <Box component="form" onSubmit={onSearchSubmit}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Search products..."
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                inputProps={{ 'aria-label': 'Search products' }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'rgba(255,255,255,0.96)'
+                  }
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchOutlinedIcon fontSize="small" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Box>
+          </Box>
         </Container>
       </AppBar>
 

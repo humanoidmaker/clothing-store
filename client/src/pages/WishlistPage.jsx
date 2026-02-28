@@ -10,16 +10,27 @@ import {
   Stack,
   Typography
 } from '@mui/material';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const WishlistPage = () => {
   const { items, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(items, 6);
 
   const handleAddToCart = (item) => {
     addToCart(
@@ -54,7 +65,7 @@ const WishlistPage = () => {
 
       {items.length > 0 && (
         <Stack spacing={1}>
-          {items.map((item) => (
+          {paginatedItems.map((item) => (
             <Card key={item.productId}>
               <CardContent sx={{ p: 1.1 }}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ sm: 'center' }}>
@@ -114,6 +125,16 @@ const WishlistPage = () => {
               </CardContent>
             </Card>
           ))}
+
+          <AppPagination
+            totalItems={totalItems}
+            page={page}
+            totalPages={totalPages}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={setRowsPerPage}
+            pageSizeOptions={[4, 6, 8, 12]}
+          />
         </Stack>
       )}
     </Box>

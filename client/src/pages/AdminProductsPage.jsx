@@ -31,10 +31,12 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import RemoveCircleOutlineOutlinedIcon from '@mui/icons-material/RemoveCircleOutlineOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import HtmlEditorField from '../components/HtmlEditorField';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const defaultCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
@@ -168,6 +170,15 @@ const AdminProductsPage = () => {
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState('');
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(products, 10);
 
   const categoryOptions = useMemo(() => {
     return [...new Set([...defaultCategoryOptions, ...products.map((product) => String(product.category || '').trim()).filter(Boolean)])];
@@ -453,7 +464,7 @@ const AdminProductsPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {products.map((product) => (
+                {paginatedItems.map((product) => (
                   <TableRow key={product._id} hover>
                     <TableCell>{product.name}</TableCell>
                     <TableCell>{product.category}</TableCell>
@@ -490,6 +501,18 @@ const AdminProductsPage = () => {
                 ))}
               </TableBody>
             </Table>
+          )}
+
+          {!loadingProducts && products.length > 0 && (
+            <AppPagination
+              totalItems={totalItems}
+              page={page}
+              totalPages={totalPages}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={setRowsPerPage}
+              pageSizeOptions={[5, 10, 20, 30]}
+            />
           )}
         </CardContent>
       </Card>

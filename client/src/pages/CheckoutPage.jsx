@@ -18,11 +18,13 @@ import {
 } from '@mui/material';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const loadRazorpayScript = () =>
@@ -55,6 +57,15 @@ const CheckoutPage = () => {
     postalCode: '',
     country: 'India'
   });
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(items, 5);
 
   const canCheckout = useMemo(() => items.length > 0, [items.length]);
 
@@ -237,7 +248,7 @@ const CheckoutPage = () => {
             <Divider sx={{ my: 1.1 }} />
 
             <Stack spacing={0.8}>
-              {items.map((item) => (
+              {paginatedItems.map((item) => (
                 <Box key={item.cartKey}>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {item.name}
@@ -250,6 +261,16 @@ const CheckoutPage = () => {
                 </Box>
               ))}
             </Stack>
+
+            <AppPagination
+              totalItems={totalItems}
+              page={page}
+              totalPages={totalPages}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={setRowsPerPage}
+              pageSizeOptions={[3, 5, 8, 10]}
+            />
 
             <Divider sx={{ my: 1.2 }} />
             <Typography variant="h5" color="primary">

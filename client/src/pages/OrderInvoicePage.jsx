@@ -19,9 +19,11 @@ import {
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import LocalPrintshopOutlinedIcon from '@mui/icons-material/LocalPrintshopOutlined';
 import { Link as RouterLink, useParams } from 'react-router-dom';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const statusColorMap = {
@@ -55,6 +57,20 @@ const OrderInvoicePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const orderItems = useMemo(
+    () => (Array.isArray(order?.orderItems) ? order.orderItems : []),
+    [order]
+  );
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(orderItems, 8);
+
   useEffect(() => {
     const fetchOrder = async () => {
       setLoading(true);
@@ -74,9 +90,9 @@ const OrderInvoicePage = () => {
   }, [id]);
 
   const itemsSubtotal = useMemo(() => {
-    if (!order?.orderItems?.length) return 0;
-    return order.orderItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
-  }, [order]);
+    if (!orderItems.length) return 0;
+    return orderItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  }, [orderItems]);
 
   const invoiceNumber = useMemo(() => {
     if (!order?._id) return '-';
@@ -117,7 +133,7 @@ const OrderInvoicePage = () => {
       <PageHeader
         eyebrow="Invoice"
         title={invoiceNumber}
-        subtitle={`Order ${order._id.slice(-8).toUpperCase()} • ${formatDateTime(order.createdAt)}`}
+        subtitle={`Order ${order._id.slice(-8).toUpperCase()} - ${formatDateTime(order.createdAt)}`}
         actions={
           <Stack direction="row" spacing={0.8}>
             <Button component={RouterLink} to="/orders" variant="outlined" startIcon={<ArrowBackOutlinedIcon />}>
@@ -227,7 +243,7 @@ const OrderInvoicePage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {order.orderItems.map((item, index) => (
+                {paginatedItems.map((item, index) => (
                   <TableRow key={`${item.product}-${index}`}>
                     <TableCell sx={{ width: 72 }}>
                       <ProductImageViewport
@@ -244,7 +260,7 @@ const OrderInvoicePage = () => {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {item.selectedSize ? `Size ${item.selectedSize}` : 'Size -'}
-                        {item.selectedColor ? ` • ${item.selectedColor}` : ''}
+                        {item.selectedColor ? ` - ${item.selectedColor}` : ''}
                       </Typography>
                     </TableCell>
                     <TableCell align="right">{item.quantity}</TableCell>
@@ -255,6 +271,16 @@ const OrderInvoicePage = () => {
               </TableBody>
             </Table>
           </Box>
+
+          <AppPagination
+            totalItems={totalItems}
+            page={page}
+            totalPages={totalPages}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={setRowsPerPage}
+            pageSizeOptions={[5, 8, 12, 20]}
+          />
 
           <Divider sx={{ my: 1.2 }} />
 

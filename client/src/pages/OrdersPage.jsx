@@ -15,8 +15,10 @@ import {
 } from '@mui/material';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import { useNavigate } from 'react-router-dom';
+import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import api from '../api';
+import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const statusColorMap = {
@@ -33,6 +35,15 @@ const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const {
+    page,
+    rowsPerPage,
+    totalItems,
+    totalPages,
+    paginatedItems,
+    setPage,
+    setRowsPerPage
+  } = usePaginationState(orders, 10);
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -85,7 +96,7 @@ const OrdersPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {orders.map((order) => (
+                {paginatedItems.map((order) => (
                   <TableRow
                     key={order._id}
                     hover
@@ -115,6 +126,16 @@ const OrdersPage = () => {
                 ))}
               </TableBody>
             </Table>
+
+            <AppPagination
+              totalItems={totalItems}
+              page={page}
+              totalPages={totalPages}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={setRowsPerPage}
+              pageSizeOptions={[5, 10, 20]}
+            />
           </CardContent>
         </Card>
       )}
