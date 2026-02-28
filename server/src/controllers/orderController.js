@@ -4,6 +4,10 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 
 const ORDER_STATUSES = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
+const PROFIT_STATUSES = ['paid', 'shipped', 'delivered'];
+const PIPELINE_STATUSES = ['pending', 'processing'];
+const REPORT_INTERVALS = ['day', 'week', 'month'];
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const validateShippingAddress = (shippingAddress) => {
   const requiredKeys = ['street', 'city', 'state', 'postalCode', 'country'];
@@ -36,6 +40,76 @@ const findVariantIndex = (product, selectedSize, selectedColor) => {
 
   const exactColor = matchesBySize.find((entry) => String(entry.variant.color || '') === selectedColor);
   return exactColor ? exactColor.index : -1;
+};
+
+const normalizeQueryValue = (value) => String(value || '').trim();
+
+const roundCurrency = (value) => Number(Number(value || 0).toFixed(2));
+
+const parseDateBoundary = (value, boundary = 'start') => {
+  const rawValue = normalizeQueryValue(value);
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsedDate = new Date(rawValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const hasExplicitTime = rawValue.includes('T');
+  if (!hasExplicitTime) {
+    if (boundary === 'end') {
+      parsedDate.setUTCHours(23, 59, 59, 999);
+    } else {
+      parsedDate.setUTCHours(0, 0, 0, 0);
+    }
+  }
+
+  return parsedDate;
+};
+
+const getIsoWeek = (date) => {
+  const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+  const isoYear = utcDate.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+  return { isoYear, week };
+};
+
+const getTrendBucket = (dateValue, interval) => {
+  const date = new Date(dateValue);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  const paddedMonth = String(month).padStart(2, '0');
+  const paddedDay = String(day).padStart(2, '0');
+
+  if (interval === 'month') {
+    return {
+      key: `${year}-${paddedMonth}`,
+      label: `${MONTH_LABELS[month - 1]} ${year}`,
+      sortOrder: year * 100 + month
+    };
+  }
+
+  if (interval === 'week') {
+    const { isoYear, week } = getIsoWeek(date);
+    const paddedWeek = String(week).padStart(2, '0');
+    return {
+      key: `${isoYear}-W${paddedWeek}`,
+      label: `W${paddedWeek} ${isoYear}`,
+      sortOrder: isoYear * 100 + week
+    };
+  }
+
+  return {
+    key: `${year}-${paddedMonth}-${paddedDay}`,
+    label: `${paddedDay} ${MONTH_LABELS[month - 1]}`,
+    sortOrder: Date.UTC(year, month - 1, day)
+  };
 };
 
 const prepareOrderItems = async (items) => {
@@ -427,6 +501,256 @@ const updateOrderStatus = async (req, res) => {
   return res.json(populatedOrder);
 };
 
+const getOrderReports = async (req, res) => {
+  const normalizedStatus = normalizeQueryValue(req.query.status).toLowerCase() || 'all';
+  const normalizedInterval = normalizeQueryValue(req.query.interval).toLowerCase() || 'day';
+  const normalizedPaymentMethod = normalizeQueryValue(req.query.paymentMethod);
+
+  if (normalizedStatus !== 'all' && !ORDER_STATUSES.includes(normalizedStatus)) {
+    return res.status(400).json({
+      message: `Invalid status filter. Allowed values: all, ${ORDER_STATUSES.join(', ')}`
+    });
+  }
+
+  if (!REPORT_INTERVALS.includes(normalizedInterval)) {
+    return res.status(400).json({
+      message: `Invalid interval filter. Allowed values: ${REPORT_INTERVALS.join(', ')}`
+    });
+  }
+
+  const fromDate = parseDateBoundary(req.query.from, 'start');
+  const toDate = parseDateBoundary(req.query.to, 'end');
+
+  if (req.query.from && !fromDate) {
+    return res.status(400).json({ message: 'Invalid "from" date filter' });
+  }
+
+  if (req.query.to && !toDate) {
+    return res.status(400).json({ message: 'Invalid "to" date filter' });
+  }
+
+  if (fromDate && toDate && fromDate > toDate) {
+    return res.status(400).json({ message: '"from" date cannot be after "to" date' });
+  }
+
+  const query = {};
+  if (normalizedStatus !== 'all') {
+    query.status = normalizedStatus;
+  }
+
+  if (normalizedPaymentMethod && normalizedPaymentMethod.toLowerCase() !== 'all') {
+    query.paymentMethod = normalizedPaymentMethod;
+  }
+
+  if (fromDate || toDate) {
+    query.createdAt = {};
+    if (fromDate) {
+      query.createdAt.$gte = fromDate;
+    }
+    if (toDate) {
+      query.createdAt.$lte = toDate;
+    }
+  }
+
+  const orders = await Order.find(query).select('status totalPrice createdAt paymentMethod orderItems');
+
+  const statusBreakdownMap = new Map(
+    ORDER_STATUSES.map((status) => [
+      status,
+      {
+        status,
+        count: 0,
+        revenue: 0
+      }
+    ])
+  );
+  const paymentBreakdownMap = new Map();
+  const trendMap = new Map();
+  const topProductsMap = new Map();
+
+  let grossRevenue = 0;
+  let profitRevenue = 0;
+  let lossRevenue = 0;
+  let pipelineRevenue = 0;
+  let totalUnits = 0;
+  let soldUnits = 0;
+  let cancelledUnits = 0;
+
+  for (const order of orders) {
+    const orderStatus = ORDER_STATUSES.includes(order.status) ? order.status : 'pending';
+    const orderTotal = Number(order.totalPrice || 0);
+    const orderItems = Array.isArray(order.orderItems) ? order.orderItems : [];
+    const paymentMethod = normalizeQueryValue(order.paymentMethod) || 'Unknown';
+    const isCancelled = orderStatus === 'cancelled';
+
+    grossRevenue += orderTotal;
+    if (PROFIT_STATUSES.includes(orderStatus)) {
+      profitRevenue += orderTotal;
+    }
+    if (PIPELINE_STATUSES.includes(orderStatus)) {
+      pipelineRevenue += orderTotal;
+    }
+    if (isCancelled) {
+      lossRevenue += orderTotal;
+    }
+
+    const statusEntry = statusBreakdownMap.get(orderStatus);
+    statusEntry.count += 1;
+    statusEntry.revenue += orderTotal;
+
+    if (!paymentBreakdownMap.has(paymentMethod)) {
+      paymentBreakdownMap.set(paymentMethod, {
+        paymentMethod,
+        count: 0,
+        revenue: 0
+      });
+    }
+    const paymentEntry = paymentBreakdownMap.get(paymentMethod);
+    paymentEntry.count += 1;
+    paymentEntry.revenue += orderTotal;
+
+    const unitCount = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    totalUnits += unitCount;
+    if (isCancelled) {
+      cancelledUnits += unitCount;
+    } else {
+      soldUnits += unitCount;
+    }
+
+    for (const item of orderItems) {
+      const quantity = Number(item.quantity || 0);
+      if (quantity <= 0) {
+        continue;
+      }
+
+      const itemRevenue = Number(item.price || 0) * quantity;
+      const productId = String(item.product || '').trim();
+      const productKey = productId || `name:${normalizeQueryValue(item.name).toLowerCase() || 'unknown'}`;
+
+      if (!topProductsMap.has(productKey)) {
+        topProductsMap.set(productKey, {
+          productId,
+          name: normalizeQueryValue(item.name) || 'Unnamed product',
+          units: 0,
+          revenue: 0,
+          cancelledUnits: 0,
+          cancelledRevenue: 0
+        });
+      }
+
+      const productEntry = topProductsMap.get(productKey);
+      if (isCancelled) {
+        productEntry.cancelledUnits += quantity;
+        productEntry.cancelledRevenue += itemRevenue;
+      } else {
+        productEntry.units += quantity;
+        productEntry.revenue += itemRevenue;
+      }
+    }
+
+    const bucket = getTrendBucket(order.createdAt, normalizedInterval);
+    if (!trendMap.has(bucket.key)) {
+      trendMap.set(bucket.key, {
+        key: bucket.key,
+        label: bucket.label,
+        sortOrder: bucket.sortOrder,
+        orders: 0,
+        revenue: 0,
+        profit: 0,
+        loss: 0,
+        pipeline: 0
+      });
+    }
+
+    const trendEntry = trendMap.get(bucket.key);
+    trendEntry.orders += 1;
+    trendEntry.revenue += orderTotal;
+    if (PROFIT_STATUSES.includes(orderStatus)) {
+      trendEntry.profit += orderTotal;
+    }
+    if (isCancelled) {
+      trendEntry.loss += orderTotal;
+    }
+    if (PIPELINE_STATUSES.includes(orderStatus)) {
+      trendEntry.pipeline += orderTotal;
+    }
+  }
+
+  const totalOrders = orders.length;
+  const cancelledCount = statusBreakdownMap.get('cancelled')?.count || 0;
+  const netRevenue = grossRevenue - lossRevenue;
+  const netProfitLoss = profitRevenue - lossRevenue;
+  const averageOrderValue = totalOrders > 0 ? grossRevenue / totalOrders : 0;
+  const cancellationRate = totalOrders > 0 ? (cancelledCount / totalOrders) * 100 : 0;
+
+  const statusBreakdown = Array.from(statusBreakdownMap.values()).map((entry) => ({
+    ...entry,
+    revenue: roundCurrency(entry.revenue)
+  }));
+
+  const paymentBreakdown = Array.from(paymentBreakdownMap.values())
+    .map((entry) => ({
+      ...entry,
+      revenue: roundCurrency(entry.revenue)
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  const trend = Array.from(trendMap.values())
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      orders: entry.orders,
+      revenue: roundCurrency(entry.revenue),
+      profit: roundCurrency(entry.profit),
+      loss: roundCurrency(entry.loss),
+      pipeline: roundCurrency(entry.pipeline),
+      netProfitLoss: roundCurrency(entry.profit - entry.loss)
+    }));
+
+  const topProducts = Array.from(topProductsMap.values())
+    .map((entry) => ({
+      ...entry,
+      revenue: roundCurrency(entry.revenue),
+      cancelledRevenue: roundCurrency(entry.cancelledRevenue)
+    }))
+    .sort((a, b) => {
+      if (b.revenue !== a.revenue) {
+        return b.revenue - a.revenue;
+      }
+      return b.units - a.units;
+    })
+    .slice(0, 10);
+
+  return res.json({
+    filters: {
+      from: fromDate ? fromDate.toISOString() : null,
+      to: toDate ? toDate.toISOString() : null,
+      status: normalizedStatus,
+      paymentMethod: normalizedPaymentMethod || 'all',
+      interval: normalizedInterval
+    },
+    totals: {
+      totalOrders,
+      grossRevenue: roundCurrency(grossRevenue),
+      profitRevenue: roundCurrency(profitRevenue),
+      lossRevenue: roundCurrency(lossRevenue),
+      netRevenue: roundCurrency(netRevenue),
+      netProfitLoss: roundCurrency(netProfitLoss),
+      pipelineRevenue: roundCurrency(pipelineRevenue),
+      averageOrderValue: roundCurrency(averageOrderValue),
+      totalUnits,
+      soldUnits,
+      cancelledUnits,
+      cancellationRate: roundCurrency(cancellationRate)
+    },
+    statusBreakdown,
+    paymentBreakdown,
+    trend,
+    topProducts
+  });
+};
+
 module.exports = {
   createOrder,
   createRazorpayOrder,
@@ -434,5 +758,6 @@ module.exports = {
   getMyOrders,
   getMyOrderById,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  getOrderReports
 };

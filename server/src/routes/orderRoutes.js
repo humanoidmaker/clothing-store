@@ -6,7 +6,8 @@ const {
   getMyOrders,
   getMyOrderById,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  getOrderReports
 } = require('../controllers/orderController');
 const { protect, admin } = require('../middleware/auth');
 
@@ -17,6 +18,7 @@ router.post('/razorpay/order', protect, createRazorpayOrder);
 router.post('/razorpay/verify', protect, verifyRazorpayPaymentAndCreateOrder);
 router.get('/my', protect, getMyOrders);
 router.get('/my/:id', protect, getMyOrderById);
+router.get('/reports/summary', protect, admin, getOrderReports);
 router.get('/', protect, admin, getAllOrders);
 router.put('/:id/status', protect, admin, updateOrderStatus);
 

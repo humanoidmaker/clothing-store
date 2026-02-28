@@ -11,6 +11,7 @@ import { StoreSettingsProvider, useStoreSettings } from './context/StoreSettings
 import { WishlistProvider } from './context/WishlistContext';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminProductsPage from './pages/AdminProductsPage';
+import AdminReportsPage from './pages/AdminReportsPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
@@ -85,7 +86,8 @@ const AppShell = () => {
                           </ProtectedRoute>
                         )}
                       >
-                        <Route index element={<Navigate to="products" replace />} />
+                        <Route index element={<Navigate to="reports" replace />} />
+                        <Route path="reports" element={<AdminReportsPage />} />
                         <Route path="products" element={<AdminProductsPage />} />
                         <Route path="orders" element={<AdminOrdersPage />} />
                         <Route path="settings" element={<AdminSettingsPage />} />
