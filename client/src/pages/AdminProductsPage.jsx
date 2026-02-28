@@ -12,7 +12,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Grid,
   IconButton,
   Stack,
   Table,
@@ -498,11 +497,17 @@ const AdminProductsPage = () => {
           <DialogTitle>{editingProductId ? 'Edit Product' : 'Create Product'}</DialogTitle>
           <DialogContent dividers>
             <Stack spacing={1.2}>
-              <Grid container spacing={1}>
-                <Grid item xs={12} md={6}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gap: 1,
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(12, minmax(0, 1fr))' }
+                }}
+              >
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2', lg: 'span 4' } }}>
                   <TextField fullWidth label="Name" name="name" value={form.name} onChange={onFieldChange} required />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 2' } }}>
                   <Autocomplete
                     freeSolo
                     options={categoryOptions}
@@ -511,8 +516,8 @@ const AdminProductsPage = () => {
                     onChange={(_, value) => setAutocompleteField('category', String(value || ''))}
                     renderInput={(params) => <TextField {...params} label="Category" required />}
                   />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 2' } }}>
                   <Autocomplete
                     freeSolo
                     options={genderOptions}
@@ -521,8 +526,8 @@ const AdminProductsPage = () => {
                     onChange={(_, value) => setAutocompleteField('gender', String(value || ''))}
                     renderInput={(params) => <TextField {...params} label="Gender" required />}
                   />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 2' } }}>
                   <Autocomplete
                     freeSolo
                     options={brandOptions}
@@ -531,14 +536,14 @@ const AdminProductsPage = () => {
                     onChange={(_, value) => setAutocompleteField('brand', String(value || ''))}
                     renderInput={(params) => <TextField {...params} label="Brand" required />}
                   />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 2' } }}>
                   <TextField fullWidth label="Material" name="material" value={form.material} onChange={onFieldChange} />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 4' } }}>
                   <TextField fullWidth label="Fit" name="fit" value={form.fit} onChange={onFieldChange} />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 4' } }}>
                   <TextField
                     fullWidth
                     label="Base Price (used if no variants)"
@@ -548,8 +553,8 @@ const AdminProductsPage = () => {
                     value={form.price}
                     onChange={onFieldChange}
                   />
-                </Grid>
-                <Grid item xs={12} md={6}>
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 4' } }}>
                   <TextField
                     fullWidth
                     label="Base Stock (used if no variants)"
@@ -559,8 +564,8 @@ const AdminProductsPage = () => {
                     value={form.countInStock}
                     onChange={onFieldChange}
                   />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
 
               <Stack spacing={0.7}>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -619,24 +624,31 @@ const AdminProductsPage = () => {
                   <Card key={`variant-${index}`} variant="outlined">
                     <CardContent sx={{ p: 1 }}>
                       <Stack spacing={0.8}>
-                        <Grid container spacing={0.8} alignItems="center">
-                          <Grid item xs={12} sm={3}>
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gap: 0.8,
+                            alignItems: 'center',
+                            gridTemplateColumns: { xs: '1fr', sm: 'repeat(12, minmax(0, 1fr))' }
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 3' } }}>
                             <TextField
                               fullWidth
                               label="Size"
                               value={variant.size}
                               onChange={(event) => onVariantChange(index, 'size', event.target.value)}
                             />
-                          </Grid>
-                          <Grid item xs={12} sm={3}>
+                          </Box>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 3' } }}>
                             <TextField
                               fullWidth
                               label="Color"
                               value={variant.color}
                               onChange={(event) => onVariantChange(index, 'color', event.target.value)}
                             />
-                          </Grid>
-                          <Grid item xs={12} sm={2}>
+                          </Box>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <TextField
                               fullWidth
                               type="number"
@@ -645,8 +657,8 @@ const AdminProductsPage = () => {
                               value={variant.price}
                               onChange={(event) => onVariantChange(index, 'price', event.target.value)}
                             />
-                          </Grid>
-                          <Grid item xs={12} sm={2}>
+                          </Box>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <TextField
                               fullWidth
                               type="number"
@@ -655,8 +667,8 @@ const AdminProductsPage = () => {
                               value={variant.stock}
                               onChange={(event) => onVariantChange(index, 'stock', event.target.value)}
                             />
-                          </Grid>
-                          <Grid item xs={12} sm={2}>
+                          </Box>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <IconButton
                               onClick={() => removeVariantRow(index)}
                               color="error"
@@ -664,8 +676,8 @@ const AdminProductsPage = () => {
                             >
                               <RemoveCircleOutlineOutlinedIcon />
                             </IconButton>
-                          </Grid>
-                        </Grid>
+                          </Box>
+                        </Box>
 
                         <Stack spacing={0.7}>
                           <Button component="label" variant="outlined" size="small" startIcon={<CloudUploadOutlinedIcon />}>
