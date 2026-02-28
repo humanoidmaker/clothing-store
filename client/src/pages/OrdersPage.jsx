@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
+import { formatINR } from '../utils/currency';
 
 const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
@@ -54,7 +55,7 @@ const OrdersPage = () => {
                   <td>{order._id.slice(-8)}</td>
                   <td>{new Date(order.createdAt).toLocaleDateString()}</td>
                   <td>{order.status}</td>
-                  <td>${order.totalPrice.toLocaleString()}</td>
+                  <td>{formatINR(order.totalPrice)}</td>
                 </tr>
               ))}
             </tbody>

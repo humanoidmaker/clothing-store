@@ -19,9 +19,11 @@ A full-stack ecommerce starter built with:
 - Product details and add-to-cart
 - Cart persisted in localStorage
 - Checkout with shipping address
+- Razorpay integration (test mode) with signature verification
 - Order creation and "My Orders" tracking
 - Admin product create/delete APIs and UI
 - Seed script for sample products + admin account
+- Prices are stored and displayed in INR (Indian Rupees)
 
 ## Prerequisites
 
@@ -37,6 +39,9 @@ A full-stack ecommerce starter built with:
 2. Create env files:
    - Copy `server/.env.example` to `server/.env`
    - Copy `client/.env.example` to `client/.env`
+   - Add Razorpay test keys in `server/.env`:
+     - `RAZORPAY_KEY_ID=rzp_test_...`
+     - `RAZORPAY_KEY_SECRET=...`
 3. Seed data (optional but recommended):
    ```bash
    npm run seed
@@ -65,10 +70,14 @@ A full-stack ecommerce starter built with:
 - `PUT /api/products/:id` (admin)
 - `DELETE /api/products/:id` (admin)
 - `POST /api/orders` (protected)
+- `POST /api/orders/razorpay/order` (protected)
+- `POST /api/orders/razorpay/verify` (protected)
 - `GET /api/orders/my` (protected)
 - `GET /api/orders` (admin)
 
 ## Notes
 
 - Cart state is managed client-side and synced to localStorage.
-- This is a solid foundation; next common additions are online payments, image uploads, and order status management workflows.
+- Razorpay is set up for test mode. Use test keys from your Razorpay Dashboard.
+- UI currency formatting uses `en-IN` locale and INR symbol.
+- This is a solid foundation; next common additions are image uploads and order status management workflows.

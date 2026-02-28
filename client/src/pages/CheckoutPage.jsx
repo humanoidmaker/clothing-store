@@ -1,19 +1,38 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { formatINR } from '../utils/currency';
+
+const loadRazorpayScript = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 
 const CheckoutPage = () => {
   const { items, subtotal, clearCart } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Razorpay');
   const [form, setForm] = useState({
     street: '',
     city: '',
     state: '',
     postalCode: '',
-    country: ''
+    country: 'India'
   });
 
   const canCheckout = useMemo(() => items.length > 0, [items.length]);
@@ -34,16 +53,63 @@ const CheckoutPage = () => {
     setSubmitting(true);
 
     try {
-      await api.post('/orders', {
+      const payload = {
         items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-        shippingAddress: form,
-        paymentMethod: 'Cash on Delivery'
+        shippingAddress: form
+      };
+
+      if (paymentMethod === 'Cash on Delivery') {
+        await api.post('/orders', {
+          ...payload,
+          paymentMethod: 'Cash on Delivery'
+        });
+
+        clearCart();
+        navigate('/orders');
+        return;
+      }
+
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Razorpay SDK failed to load. Check internet connection.');
+      }
+
+      const { data } = await api.post('/orders/razorpay/order', payload);
+      const paymentResult = await new Promise((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key: data.keyId,
+          amount: data.amount,
+          currency: data.currency,
+          name: 'HumanoidMaker',
+          description: 'Robotics order payment',
+          order_id: data.orderId,
+          handler: (response) => resolve(response),
+          prefill: {
+            name: user?.name || '',
+            email: user?.email || ''
+          },
+          theme: {
+            color: '#0f5c4b'
+          },
+          modal: {
+            ondismiss: () => reject(new Error('Payment cancelled'))
+          }
+        });
+
+        rzp.open();
+      });
+
+      await api.post('/orders/razorpay/verify', {
+        ...payload,
+        razorpayOrderId: paymentResult.razorpay_order_id,
+        razorpayPaymentId: paymentResult.razorpay_payment_id,
+        razorpaySignature: paymentResult.razorpay_signature
       });
 
       clearCart();
       navigate('/orders');
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not place order');
+      setError(requestError.response?.data?.message || requestError.message || 'Could not place order');
     } finally {
       setSubmitting(false);
     }
@@ -63,6 +129,19 @@ const CheckoutPage = () => {
         <h1>Checkout</h1>
 
         <div className="form-grid">
+          <div>
+            <label htmlFor="paymentMethod">Payment Method</label>
+            <select
+              id="paymentMethod"
+              name="paymentMethod"
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value)}
+            >
+              <option value="Razorpay">Razorpay (Test Mode)</option>
+              <option value="Cash on Delivery">Cash on Delivery</option>
+            </select>
+          </div>
+
           <div>
             <label htmlFor="street">Street</label>
             <input id="street" name="street" value={form.street} onChange={onChange} required />
@@ -92,7 +171,7 @@ const CheckoutPage = () => {
         {error && <p className="error">{error}</p>}
 
         <button className="btn btn-primary" type="submit" disabled={submitting}>
-          {submitting ? 'Placing order...' : 'Place order'}
+          {submitting ? 'Processing...' : paymentMethod === 'Razorpay' ? 'Pay with Razorpay' : 'Place order'}
         </button>
       </form>
 
@@ -103,13 +182,13 @@ const CheckoutPage = () => {
             <li key={item.productId}>
               <span>{item.name}</span>
               <span>
-                {item.quantity} x ${item.price.toLocaleString()}
+                {item.quantity} x {formatINR(item.price)}
               </span>
             </li>
           ))}
         </ul>
 
-        <p className="summary-total">${subtotal.toLocaleString()}</p>
+        <p className="summary-total">{formatINR(subtotal)}</p>
       </aside>
     </section>
   );

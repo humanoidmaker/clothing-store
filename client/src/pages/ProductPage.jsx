@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api';
 import { useCart } from '../context/CartContext';
+import { formatINR } from '../utils/currency';
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -52,7 +53,7 @@ const ProductPage = () => {
         </p>
 
         <div className="product-row detail-row">
-          <strong className="price">${product.price.toLocaleString()}</strong>
+          <strong className="price">{formatINR(product.price)}</strong>
 
           <div className="inline">
             <label htmlFor="qty">Qty</label>

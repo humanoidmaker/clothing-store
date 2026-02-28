@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
+import { formatINR } from '../utils/currency';
 
 const initialForm = {
   name: '',
@@ -94,7 +95,7 @@ const AdminProductsPage = () => {
           </div>
 
           <div>
-            <label htmlFor="price">Price</label>
+            <label htmlFor="price">Price (INR)</label>
             <input id="price" name="price" type="number" min="0" value={form.price} onChange={onChange} required />
           </div>
 
@@ -158,7 +159,7 @@ const AdminProductsPage = () => {
                 <tr key={product._id}>
                   <td>{product.name}</td>
                   <td>{product.category}</td>
-                  <td>${product.price.toLocaleString()}</td>
+                  <td>{formatINR(product.price)}</td>
                   <td>{product.countInStock}</td>
                   <td>
                     <button className="btn btn-danger" onClick={() => onDelete(product._id)} type="button">

@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { formatINR } from '../utils/currency';
 
 const CartPage = () => {
   const { items, subtotal, removeFromCart, updateQuantity } = useCart();
@@ -35,7 +36,7 @@ const CartPage = () => {
                   <Link to={`/products/${item.productId}`}>
                     <strong>{item.name}</strong>
                   </Link>
-                  <p className="muted">${item.price.toLocaleString()} each</p>
+                  <p className="muted">{formatINR(item.price)} each</p>
                 </div>
 
                 <select
@@ -59,7 +60,7 @@ const CartPage = () => {
           <aside className="card summary-card">
             <h2>Summary</h2>
             <p className="muted">Subtotal ({items.length} item types)</p>
-            <p className="summary-total">${subtotal.toLocaleString()}</p>
+            <p className="summary-total">{formatINR(subtotal)}</p>
             <button className="btn btn-accent" type="button" onClick={proceedToCheckout}>
               Proceed to checkout
             </button>

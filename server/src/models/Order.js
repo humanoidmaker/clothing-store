@@ -49,6 +49,14 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: 'Cash on Delivery'
     },
+    paymentResult: {
+      razorpayOrderId: { type: String },
+      razorpayPaymentId: { type: String },
+      razorpaySignature: { type: String }
+    },
+    paidAt: {
+      type: Date
+    },
     totalPrice: {
       type: Number,
       required: true,

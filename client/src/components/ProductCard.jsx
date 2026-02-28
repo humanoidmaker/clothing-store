@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { formatINR } from '../utils/currency';
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
@@ -18,7 +19,7 @@ const ProductCard = ({ product }) => {
         <p className="muted">{product.description}</p>
 
         <div className="product-row">
-          <strong>${product.price.toLocaleString()}</strong>
+          <strong>{formatINR(product.price)}</strong>
           <button
             className="btn btn-primary"
             type="button"
