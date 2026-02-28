@@ -1,6 +1,7 @@
 {
   "name": "humanoidmaker-ecommerce",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "nodemon --watch server.js --watch server/src --ext js,json --exec node server.js",

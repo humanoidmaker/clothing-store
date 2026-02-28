@@ -1,94 +1,103 @@
-# Astra Attire Ecommerce (Next.js + Express + MongoDB)
+# HumanoidMaker Ecommerce
 
-A clothing-focused ecommerce app migrated to a Next.js-hosted runtime while preserving all storefront and admin features.
+Production-ready ecommerce platform with a Next.js host layer, React admin/storefront UI, and Express + MongoDB API.
 
-## Stack
+## Features
 
-- Frontend host: Next.js (App Router catch-all)
-- UI: React + Material UI
-- API: Express + MongoDB (Mongoose) mounted at `/api` inside the same Node process
-- Auth: JWT
-- Payments: Razorpay (test mode)
-- Currency: INR
+- Customer storefront with catalog, filters, cart, wishlist, checkout, and order history
+- Admin panel for products, variants, orders, settings, and SEO
+- Profit/loss reporting with purchase price support on products and variants
+- SEO controls for default, public-page, and product-level metadata
+- Popup media library with upload, select, preview, and CRUD
+- Razorpay payment flow (test mode supported)
 
-## What Was Preserved
+## Tech Stack
 
-- Storefront product catalog, filters, cart, wishlist, checkout, order history, invoice page
-- Admin products, orders, settings
-- Admin SEO manager for default tags, public pages, and product-specific tags
-- Admin business reporting with filters, charts, and cost-based profit/loss (using `purchasePrice`)
-- Variant pricing/stock/image support
-- Razorpay verification flow
+- Next.js 14 (App Router catch-all page)
+- React 18 + Material UI
+- Express 4 + Mongoose
+- MongoDB
+- JWT auth
+- Razorpay integration
 
 ## Project Structure
 
-- `app/` Next.js App Router shell
-- `client/src/` existing React UI modules and pages (rendered by Next catch-all page)
-- `server/src/` Express API, models, controllers, seed script
-- `server.js` unified runtime that serves both Next pages and `/api`
+- `app/`: Next.js app shell
+- `client/src/`: React UI pages/components
+- `server/src/`: Express routes/controllers/models
+- `server.js`: unified runtime for pages + `/api`
 
-## Setup
+## Prerequisites
+
+- Node.js 18+
+- npm 9+
+- MongoDB running locally or remotely
+
+## Quick Start
 
 1. Install dependencies:
    ```bash
    npm install
    ```
-2. Create env file:
-   - Copy `.env.example` to `.env`
-3. Add Razorpay test keys in `.env`:
-   - `RAZORPAY_KEY_ID=rzp_test_...`
-   - `RAZORPAY_KEY_SECRET=...`
-4. Seed data:
+2. Create environment file:
+   ```bash
+   copy .env.example .env
+   ```
+   On macOS/Linux:
+   ```bash
+   cp .env.example .env
+   ```
+3. Update `.env` values.
+4. (Optional) Seed sample data:
    ```bash
    npm run seed
    ```
-5. Start the app:
+5. Start development server:
    ```bash
    npm run dev
    ```
+6. Open:
+   - App: `http://localhost:3000`
+   - API health: `http://localhost:3000/api/health`
 
-- App + API: `http://localhost:3000`
-- Health check: `http://localhost:3000/api/health`
+## Environment Variables
 
-## Default Seeded Admin
+- `PORT`: server port (default `3000`)
+- `MONGO_URI`: MongoDB connection string
+- `JWT_SECRET`: long random secret for auth tokens
+- `RAZORPAY_KEY_ID`: Razorpay key id
+- `RAZORPAY_KEY_SECRET`: Razorpay secret
+- `NEXT_PUBLIC_API_URL`: API base path (default `/api`)
+
+## Available Scripts
+
+- `npm run dev`: run development server with nodemon
+- `npm run build`: build Next.js app
+- `npm start`: run production server
+- `npm run seed`: seed database
+
+## Seed Admin (Default)
 
 - Email: `admin@example.com`
 - Password: `admin123`
 
-## Main API Routes
+Change default credentials immediately in any non-local environment.
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me` (protected)
-- `GET /api/products` (supports search + clothing filters)
-- `GET /api/products/:id`
-- `POST /api/products` (admin)
-- `PUT /api/products/:id` (admin)
-- `DELETE /api/products/:id` (admin)
-- `POST /api/orders` (protected)
-- `POST /api/orders/razorpay/order` (protected)
-- `POST /api/orders/razorpay/verify` (protected)
-- `GET /api/orders/my` (protected)
-- `GET /api/orders` (admin)
-- `GET /api/orders/reports/summary` (admin, supports report filters)
-- `PUT /api/orders/:id/status` (admin)
-- `GET /api/seo/admin` (admin)
-- `PUT /api/seo/defaults` (admin)
-- `PUT /api/seo/public-page` (admin)
-- `DELETE /api/seo/public-page/:key` (admin)
-- `GET /api/seo/products` (admin)
-- `GET /api/seo/products/:id` (admin)
-- `PUT /api/seo/products/:id` (admin)
-- `GET /api/media` (admin)
-- `POST /api/media` (admin)
-- `PUT /api/media/:id` (admin)
-- `DELETE /api/media/:id` (admin)
+## Production Notes
 
-## Notes
+- Use HTTPS, secure secrets management, rate limits, backups, and monitoring before production use.
+- Razorpay credentials in this repo are for integration/testing; use your own production keys.
+- Review your regional legal, tax, and privacy compliance obligations before launch.
 
-- Product and variant forms include `purchasePrice` so reports calculate real cost-based profit/loss.
-- Product page includes sharing actions (native share, WhatsApp, Facebook, X, Telegram, copy link for Instagram) using URL-level OG/Twitter tags.
-- SEO metadata is server-rendered per route from admin-configurable SEO settings for better Google/social crawler compatibility.
-- SEO and product image selection support popup media gallery with upload, thumbnail preview, single/multi-select, and media CRUD.
-- Existing older orders without item `purchasePrice` use product fallback purchase pricing in reports.
-- If you seeded before purchase pricing support, re-run `npm run seed` to refresh sample cost data.
+## Open Source License
+
+This project is licensed under the MIT License. See [LICENSE](./LICENSE).
+
+Important legal summary: this software is provided "AS IS", without warranty of any kind, and the authors/contributors are not liable for any claim, damages, outages, data loss, security incidents, or other production/business impact from using this system.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Open a pull request
