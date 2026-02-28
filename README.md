@@ -79,11 +79,16 @@ A clothing-focused ecommerce app migrated to a Next.js-hosted runtime while pres
 - `GET /api/seo/products` (admin)
 - `GET /api/seo/products/:id` (admin)
 - `PUT /api/seo/products/:id` (admin)
+- `GET /api/media` (admin)
+- `POST /api/media` (admin)
+- `PUT /api/media/:id` (admin)
+- `DELETE /api/media/:id` (admin)
 
 ## Notes
 
 - Product and variant forms include `purchasePrice` so reports calculate real cost-based profit/loss.
 - Product page includes sharing actions (native share, WhatsApp, Facebook, X, Telegram, copy link for Instagram) using URL-level OG/Twitter tags.
 - SEO metadata is server-rendered per route from admin-configurable SEO settings for better Google/social crawler compatibility.
+- SEO and product image selection support popup media gallery with upload, thumbnail preview, single/multi-select, and media CRUD.
 - Existing older orders without item `purchasePrice` use product fallback purchase pricing in reports.
 - If you seeded before purchase pricing support, re-run `npm run seed` to refresh sample cost data.

@@ -15,7 +15,10 @@ import {
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import PageHeader from '../components/PageHeader';
+import ProductImageViewport from '../components/ProductImageViewport';
+import MediaLibraryDialog from '../components/MediaLibraryDialog';
 import api from '../api';
 
 const DEFAULT_SEO_META = {
@@ -48,7 +51,42 @@ const normalizeMeta = (value = {}) => ({
   ...value
 });
 
-const createSeoFields = ({ title, value, onChange }) => (
+const SeoImagePicker = ({ label, image, altText, onPick, onClear, onAltChange }) => {
+  return (
+    <Stack spacing={0.6}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      {image ? (
+        <Box sx={{ width: 120, minWidth: 120 }}>
+          <ProductImageViewport src={image} alt={altText || label} aspectRatio="1 / 1" fit="cover" />
+        </Box>
+      ) : (
+        <Alert severity="info" sx={{ py: 0.3 }}>
+          No image selected
+        </Alert>
+      )}
+      <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+        <Button variant="outlined" size="small" startIcon={<CollectionsOutlinedIcon />} onClick={onPick}>
+          Choose From Gallery
+        </Button>
+        {image ? (
+          <Button variant="outlined" color="error" size="small" onClick={onClear}>
+            Clear
+          </Button>
+        ) : null}
+      </Stack>
+      <TextField
+        label={`${label} Alt`}
+        size="small"
+        value={altText}
+        onChange={(event) => onAltChange(event.target.value)}
+      />
+    </Stack>
+  );
+};
+
+const createSeoFields = ({ title, value, onChange, onPickImage }) => (
   <Stack spacing={1}>
     <Typography variant="subtitle2">{title}</Typography>
     <Box
@@ -134,17 +172,16 @@ const createSeoFields = ({ title, value, onChange }) => (
         value={value.ogDescription}
         onChange={(event) => onChange('ogDescription', event.target.value)}
       />
-      <TextField
-        label="OG Image URL"
-        size="small"
-        value={value.ogImage}
-        onChange={(event) => onChange('ogImage', event.target.value)}
-      />
-      <TextField
-        label="OG Image Alt"
-        size="small"
-        value={value.ogImageAlt}
-        onChange={(event) => onChange('ogImageAlt', event.target.value)}
+      <SeoImagePicker
+        label="OG Image"
+        image={value.ogImage}
+        altText={value.ogImageAlt}
+        onPick={() => onPickImage('ogImage', 'ogImageAlt')}
+        onClear={() => {
+          onChange('ogImage', '');
+          onChange('ogImageAlt', '');
+        }}
+        onAltChange={(nextAlt) => onChange('ogImageAlt', nextAlt)}
       />
     </Box>
 
@@ -185,17 +222,16 @@ const createSeoFields = ({ title, value, onChange }) => (
         value={value.twitterDescription}
         onChange={(event) => onChange('twitterDescription', event.target.value)}
       />
-      <TextField
-        label="Twitter Image URL"
-        size="small"
-        value={value.twitterImage}
-        onChange={(event) => onChange('twitterImage', event.target.value)}
-      />
-      <TextField
-        label="Twitter Image Alt"
-        size="small"
-        value={value.twitterImageAlt}
-        onChange={(event) => onChange('twitterImageAlt', event.target.value)}
+      <SeoImagePicker
+        label="Twitter Image"
+        image={value.twitterImage}
+        altText={value.twitterImageAlt}
+        onPick={() => onPickImage('twitterImage', 'twitterImageAlt')}
+        onClear={() => {
+          onChange('twitterImage', '');
+          onChange('twitterImageAlt', '');
+        }}
+        onAltChange={(nextAlt) => onChange('twitterImageAlt', nextAlt)}
       />
       <TextField
         label="Twitter Site (@handle)"
@@ -234,6 +270,11 @@ const AdminSeoPage = () => {
   const [selectedProductInfo, setSelectedProductInfo] = useState(null);
   const [productSeoDraft, setProductSeoDraft] = useState(DEFAULT_SEO_META);
   const [loadingProductSeo, setLoadingProductSeo] = useState(false);
+
+  const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
+  const [mediaDialogScope, setMediaDialogScope] = useState('');
+  const [mediaDialogField, setMediaDialogField] = useState('');
+  const [mediaDialogAltField, setMediaDialogAltField] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -316,6 +357,63 @@ const AdminSeoPage = () => {
       ...current,
       [field]: value
     }));
+  };
+
+  const openMediaDialogFor = (scope, field, altField) => {
+    setMediaDialogScope(scope);
+    setMediaDialogField(field);
+    setMediaDialogAltField(altField);
+    setMediaDialogOpen(true);
+  };
+
+  const mediaDialogSelectedUrls = useMemo(() => {
+    if (!mediaDialogField) return [];
+
+    if (mediaDialogScope === 'defaults') {
+      return defaultsDraft[mediaDialogField] ? [defaultsDraft[mediaDialogField]] : [];
+    }
+    if (mediaDialogScope === 'page') {
+      return pageDraft.meta?.[mediaDialogField] ? [pageDraft.meta[mediaDialogField]] : [];
+    }
+    if (mediaDialogScope === 'product') {
+      return productSeoDraft[mediaDialogField] ? [productSeoDraft[mediaDialogField]] : [];
+    }
+    return [];
+  }, [mediaDialogScope, mediaDialogField, defaultsDraft, pageDraft.meta, productSeoDraft]);
+
+  const onSelectMedia = (selectedAssets) => {
+    const firstAsset = Array.isArray(selectedAssets) && selectedAssets.length > 0 ? selectedAssets[0] : null;
+    if (!firstAsset || !mediaDialogField) return;
+
+    const selectedUrl = String(firstAsset.url || '');
+    const selectedAlt = String(firstAsset.altText || firstAsset.name || '').trim();
+
+    if (mediaDialogScope === 'defaults') {
+      setDefaultsDraft((current) => ({
+        ...current,
+        [mediaDialogField]: selectedUrl,
+        [mediaDialogAltField]: current[mediaDialogAltField] || selectedAlt
+      }));
+      return;
+    }
+    if (mediaDialogScope === 'page') {
+      setPageDraft((current) => ({
+        ...current,
+        meta: {
+          ...current.meta,
+          [mediaDialogField]: selectedUrl,
+          [mediaDialogAltField]: current.meta?.[mediaDialogAltField] || selectedAlt
+        }
+      }));
+      return;
+    }
+    if (mediaDialogScope === 'product') {
+      setProductSeoDraft((current) => ({
+        ...current,
+        [mediaDialogField]: selectedUrl,
+        [mediaDialogAltField]: current[mediaDialogAltField] || selectedAlt
+      }));
+    }
   };
 
   const onSaveDefaults = async () => {
@@ -459,7 +557,7 @@ const AdminSeoPage = () => {
       <PageHeader
         eyebrow="Admin"
         title="SEO Manager"
-        subtitle="Manually control SEO, Open Graph and Twitter tags for public pages and product detail pages."
+        subtitle="Use media gallery popup to pick SEO images for public pages and products."
       />
 
       {(error || success) && (
@@ -480,7 +578,8 @@ const AdminSeoPage = () => {
               {createSeoFields({
                 title: 'Default Meta & Social Tags',
                 value: defaultsDraft,
-                onChange: onChangeDefaults
+                onChange: onChangeDefaults,
+                onPickImage: (field, altField) => openMediaDialogFor('defaults', field, altField)
               })}
               <Stack direction="row" spacing={0.8}>
                 <Button
@@ -553,7 +652,14 @@ const AdminSeoPage = () => {
                   />
                 </Stack>
 
-                <Box>{createSeoFields({ title: 'Page Meta & Social Tags', value: pageDraft.meta, onChange: onChangePageMeta })}</Box>
+                <Box>
+                  {createSeoFields({
+                    title: 'Page Meta & Social Tags',
+                    value: pageDraft.meta,
+                    onChange: onChangePageMeta,
+                    onPickImage: (field, altField) => openMediaDialogFor('page', field, altField)
+                  })}
+                </Box>
               </Box>
 
               <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
@@ -618,7 +724,8 @@ const AdminSeoPage = () => {
                   {createSeoFields({
                     title: 'Product Meta & Social Tags',
                     value: productSeoDraft,
-                    onChange: onChangeProductMeta
+                    onChange: onChangeProductMeta,
+                    onPickImage: (field, altField) => openMediaDialogFor('product', field, altField)
                   })}
                   <Stack direction="row" spacing={0.8}>
                     <Button
@@ -636,6 +743,16 @@ const AdminSeoPage = () => {
           </CardContent>
         </Card>
       </Stack>
+
+      <MediaLibraryDialog
+        open={mediaDialogOpen}
+        onClose={() => setMediaDialogOpen(false)}
+        title="SEO Media Gallery"
+        mode="single"
+        selectedUrls={mediaDialogSelectedUrls}
+        uploadProfile="product"
+        onSelect={onSelectMedia}
+      />
     </Box>
   );
 };

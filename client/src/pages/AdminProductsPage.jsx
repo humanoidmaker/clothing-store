@@ -34,6 +34,7 @@ import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
 import HtmlEditorField from '../components/HtmlEditorField';
+import MediaLibraryDialog from '../components/MediaLibraryDialog';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
 import { useStoreSettings } from '../context/StoreSettingsContext';
@@ -106,18 +107,48 @@ const mapProductToForm = (product) => ({
 });
 
 const parseProductImages = (product) => {
+  const normalizeImageUrl = (value) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+
+    if (value && typeof value === 'object') {
+      return String(value.url || '').trim();
+    }
+
+    return '';
+  };
+
+  const normalizeImageUrls = (values) =>
+    Array.isArray(values) ? values.map((value) => normalizeImageUrl(value)).filter(Boolean) : [];
+
   if (Array.isArray(product.images) && product.images.length > 0) {
-    return product.images.filter(Boolean);
+    return normalizeImageUrls(product.images);
   }
 
   if (product.image) {
-    return [product.image];
+    return normalizeImageUrls([product.image]);
   }
 
   return [];
 };
 
 const parseProductVariants = (product) => {
+  const normalizeImageUrl = (value) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+
+    if (value && typeof value === 'object') {
+      return String(value.url || '').trim();
+    }
+
+    return '';
+  };
+
+  const normalizeImageUrls = (values) =>
+    Array.isArray(values) ? values.map((value) => normalizeImageUrl(value)).filter(Boolean) : [];
+
   if (Array.isArray(product.variants) && product.variants.length > 0) {
     return product.variants.map((variant) => ({
       id: createVariantId(),
@@ -126,7 +157,7 @@ const parseProductVariants = (product) => {
       price: variant.price ?? '',
       purchasePrice: variant.purchasePrice ?? '',
       stock: variant.stock ?? '',
-      images: Array.isArray(variant.images) ? variant.images.filter(Boolean) : []
+      images: normalizeImageUrls(variant.images)
     }));
   }
 
@@ -290,6 +321,11 @@ const AdminProductsPage = () => {
     genders: defaultGenderOptions,
     brands: []
   });
+  const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
+  const [mediaDialogTarget, setMediaDialogTarget] = useState({
+    type: 'product',
+    variantRowId: ''
+  });
 
   const categoryOptions = useMemo(() => {
     return [
@@ -319,6 +355,24 @@ const AdminProductsPage = () => {
       ])
     ];
   }, [catalogOptions.brands, products]);
+
+  const mediaDialogSelectedUrls = useMemo(() => {
+    const normalizeImageUrl = (value) => {
+      if (typeof value === 'string') return value.trim();
+      if (value && typeof value === 'object') return String(value.url || '').trim();
+      return '';
+    };
+
+    const normalizeImageUrls = (values) =>
+      Array.isArray(values) ? values.map((value) => normalizeImageUrl(value)).filter(Boolean) : [];
+
+    if (mediaDialogTarget.type === 'variant' && mediaDialogTarget.variantRowId) {
+      const row = variantRows.find((item) => item.id === mediaDialogTarget.variantRowId);
+      return normalizeImageUrls(row?.images);
+    }
+
+    return normalizeImageUrls(productImages);
+  }, [mediaDialogTarget, variantRows, productImages]);
 
   const resetForm = () => {
     setForm(createInitialForm(storeName));
@@ -467,6 +521,50 @@ const AdminProductsPage = () => {
     } catch (validationError) {
       setError(validationError.message || 'Invalid image');
     }
+  };
+
+  const openProductMediaLibrary = () => {
+    setMediaDialogTarget({
+      type: 'product',
+      variantRowId: ''
+    });
+    setMediaDialogOpen(true);
+  };
+
+  const openVariantMediaLibrary = (rowId) => {
+    setMediaDialogTarget({
+      type: 'variant',
+      variantRowId: rowId
+    });
+    setMediaDialogOpen(true);
+  };
+
+  const onSelectFromMediaLibrary = (selectedAssets) => {
+    const normalizeImageUrl = (value) => {
+      if (typeof value === 'string') return value.trim();
+      if (value && typeof value === 'object') return String(value.url || '').trim();
+      return '';
+    };
+
+    const normalizeImageUrls = (values) =>
+      Array.isArray(values) ? values.map((value) => normalizeImageUrl(value)).filter(Boolean) : [];
+
+    const urls = Array.isArray(selectedAssets)
+      ? selectedAssets.map((asset) => String(asset?.url || '').trim()).filter(Boolean)
+      : [];
+
+    if (mediaDialogTarget.type === 'variant' && mediaDialogTarget.variantRowId) {
+      setVariantRows((current) =>
+        current.map((row) =>
+          row.id === mediaDialogTarget.variantRowId
+            ? { ...row, images: [...new Set([...normalizeImageUrls(row.images), ...urls])] }
+            : row
+        )
+      );
+      return;
+    }
+
+    setProductImages((current) => [...new Set([...normalizeImageUrls(current), ...urls])]);
   };
 
   const removeVariantImage = (rowId, imageIndex) => {
@@ -881,6 +979,9 @@ const AdminProductsPage = () => {
                     Upload Images
                     <input hidden multiple type="file" accept="image/png,image/jpeg,image/webp" onChange={onAddProductImages} />
                   </Button>
+                  <Button variant="outlined" onClick={openProductMediaLibrary}>
+                    Choose From Gallery
+                  </Button>
                   <Typography variant="caption" color="text.secondary">
                     Allowed: JPG/PNG/WEBP, each {'<='} 10MB, min {minImageDimension}x{minImageDimension}. Auto-optimized for product card and details viewports.
                   </Typography>
@@ -995,16 +1096,25 @@ const AdminProductsPage = () => {
                         </Box>
 
                         <Stack spacing={0.7}>
-                          <Button component="label" variant="outlined" size="small" startIcon={<CloudUploadOutlinedIcon />}>
-                            Upload Variant Images
-                            <input
-                              hidden
-                              multiple
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              onChange={(event) => onAddVariantImages(variant.id, event)}
-                            />
-                          </Button>
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.7}>
+                            <Button component="label" variant="outlined" size="small" startIcon={<CloudUploadOutlinedIcon />}>
+                              Upload Variant Images
+                              <input
+                                hidden
+                                multiple
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                onChange={(event) => onAddVariantImages(variant.id, event)}
+                              />
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => openVariantMediaLibrary(variant.id)}
+                            >
+                              Choose From Gallery
+                            </Button>
+                          </Stack>
                           <Typography variant="caption" color="text.secondary">
                             Auto-optimized for gallery and variant viewport sizes before saving.
                           </Typography>
@@ -1067,6 +1177,16 @@ const AdminProductsPage = () => {
           </DialogActions>
         </Box>
       </Dialog>
+
+      <MediaLibraryDialog
+        open={mediaDialogOpen}
+        onClose={() => setMediaDialogOpen(false)}
+        title={mediaDialogTarget.type === 'variant' ? 'Variant Image Gallery' : 'Product Image Gallery'}
+        mode="multiple"
+        selectedUrls={mediaDialogSelectedUrls}
+        uploadProfile={mediaDialogTarget.type === 'variant' ? 'variant' : 'product'}
+        onSelect={onSelectFromMediaLibrary}
+      />
     </Box>
   );
 };
