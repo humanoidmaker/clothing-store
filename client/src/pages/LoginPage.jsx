@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
 import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
@@ -32,14 +32,17 @@ const LoginPage = () => {
   };
 
   return (
-    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '65vh' }}>
-      <Card sx={{ width: '100%', maxWidth: 460, borderRadius: 4 }}>
-        <CardContent component="form" onSubmit={onSubmit}>
-          <Typography variant="h4" sx={{ mb: 0.5 }}>
+    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: { xs: 'unset', md: '68vh' }, py: { xs: 0.6, md: 1.2 } }}>
+      <Card sx={{ width: '100%', maxWidth: 440 }}>
+        <CardContent component="form" onSubmit={onSubmit} sx={{ p: { xs: 1.5, md: 2 } }}>
+          <Typography variant="overline" sx={{ color: 'secondary.main', fontWeight: 700, letterSpacing: '0.12em' }}>
             Welcome Back
           </Typography>
+          <Typography variant="h5" sx={{ mb: 0.5 }}>
+            Login to Astra Attire
+          </Typography>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Login to continue shopping your favorite styles.
+            Continue from where you left off and manage your orders in one place.
           </Typography>
 
           <Stack spacing={1.6}>
@@ -69,3 +72,4 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
+

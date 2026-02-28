@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -18,6 +18,7 @@ import {
   Typography
 } from '@mui/material';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import PageHeader from '../components/PageHeader';
 import api from '../api';
 import { formatINR } from '../utils/currency';
 
@@ -32,11 +33,12 @@ const initialForm = {
   colors: 'Black,White',
   material: '',
   fit: 'Regular',
+  variants: '',
   price: '',
   countInStock: ''
 };
 
-const categories = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts'];
+const categories = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
 const genders = ['Men', 'Women', 'Unisex'];
 
 const AdminProductsPage = () => {
@@ -74,10 +76,18 @@ const AdminProductsPage = () => {
     setSaving(true);
 
     try {
-      await api.post('/products', {
+      const payload = {
         ...form,
         price: Number(form.price),
         countInStock: Number(form.countInStock || 0)
+      };
+
+      if (!form.variants || !form.variants.trim()) {
+        delete payload.variants;
+      }
+
+      await api.post('/products', {
+        ...payload
       });
       setForm(initialForm);
       await fetchProducts();
@@ -102,18 +112,20 @@ const AdminProductsPage = () => {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 2 }}>
-        Admin Catalog
-      </Typography>
+      <PageHeader
+        eyebrow="Admin"
+        title="Catalog Management"
+        subtitle="Create and maintain clothing inventory with category and variant metadata."
+      />
 
       <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2.2} alignItems="flex-start">
-        <Card sx={{ borderRadius: 3, width: '100%', flex: 1 }}>
+        <Card sx={{ width: '100%', flex: 1 }}>
           <CardContent component="form" onSubmit={onCreate}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              Add Clothing Product
+              Add Product
             </Typography>
 
-            <Grid container spacing={2}>
+            <Grid container spacing={1.6}>
               <Grid item xs={12} md={6}>
                 <TextField fullWidth label="Name" name="name" value={form.name} onChange={onChange} required />
               </Grid>
@@ -172,6 +184,18 @@ const AdminProductsPage = () => {
                   fullWidth
                   multiline
                   minRows={3}
+                  label="Variants JSON (size/color/price/stock)"
+                  name="variants"
+                  value={form.variants}
+                  onChange={onChange}
+                  placeholder='[{"size":"8","color":"Black","price":4999,"stock":6},{"size":"9","color":"Black","price":5299,"stock":4}]'
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={3}
                   label="Description"
                   name="description"
                   value={form.description}
@@ -193,9 +217,9 @@ const AdminProductsPage = () => {
           </CardContent>
         </Card>
 
-        <Card sx={{ borderRadius: 3, width: '100%', flex: 1.2 }}>
+        <Card sx={{ width: '100%', flex: 1.2 }}>
           <CardContent sx={{ overflowX: 'auto' }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
+            <Typography variant="h6" sx={{ mb: 1.2 }}>
               Current Catalog
             </Typography>
 
@@ -251,3 +275,4 @@ const AdminProductsPage = () => {
 };
 
 export default AdminProductsPage;
+

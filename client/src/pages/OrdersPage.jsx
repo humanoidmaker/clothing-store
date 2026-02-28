@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Table,
   TableBody,
@@ -12,8 +13,17 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
+import PageHeader from '../components/PageHeader';
 import api from '../api';
 import { formatINR } from '../utils/currency';
+
+const statusColorMap = {
+  pending: 'warning',
+  paid: 'success',
+  shipped: 'info',
+  delivered: 'success',
+  cancelled: 'error'
+};
 
 const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
@@ -40,9 +50,11 @@ const OrdersPage = () => {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 2 }}>
-        My Orders
-      </Typography>
+      <PageHeader
+        eyebrow="Orders"
+        title="My Orders"
+        subtitle="Track payments and status updates for all your purchases."
+      />
 
       {loading && (
         <Box sx={{ py: 8, display: 'grid', placeItems: 'center' }}>
@@ -55,7 +67,7 @@ const OrdersPage = () => {
       {!loading && !error && orders.length === 0 && <Alert severity="info">You have no orders yet.</Alert>}
 
       {!loading && !error && orders.length > 0 && (
-        <Card sx={{ borderRadius: 3 }}>
+        <Card>
           <CardContent sx={{ overflowX: 'auto' }}>
             <Table>
               <TableHead>
@@ -70,10 +82,21 @@ const OrdersPage = () => {
               <TableBody>
                 {orders.map((order) => (
                   <TableRow key={order._id} hover>
-                    <TableCell>{order._id.slice(-8).toUpperCase()}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {order._id.slice(-8).toUpperCase()}
+                      </Typography>
+                    </TableCell>
                     <TableCell>{new Date(order.createdAt).toLocaleDateString('en-IN')}</TableCell>
                     <TableCell>{order.paymentMethod}</TableCell>
-                    <TableCell sx={{ textTransform: 'capitalize' }}>{order.status}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={order.status}
+                        size="small"
+                        color={statusColorMap[order.status] || 'default'}
+                        sx={{ textTransform: 'capitalize' }}
+                      />
+                    </TableCell>
                     <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
                   </TableRow>
                 ))}
@@ -87,3 +110,4 @@ const OrdersPage = () => {
 };
 
 export default OrdersPage;
+

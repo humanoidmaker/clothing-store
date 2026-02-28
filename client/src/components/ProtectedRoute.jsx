@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from 'react-router-dom';
+﻿import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,3 +26,4 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 };
 
 export default ProtectedRoute;
+

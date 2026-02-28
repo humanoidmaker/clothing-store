@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -37,11 +37,14 @@ const RegisterPage = () => {
   };
 
   return (
-    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '65vh' }}>
-      <Card sx={{ width: '100%', maxWidth: 500, borderRadius: 4 }}>
-        <CardContent component="form" onSubmit={onSubmit}>
-          <Typography variant="h4" sx={{ mb: 1 }}>
-            Create Account
+    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: { xs: 'unset', md: '68vh' }, py: { xs: 0.6, md: 1.2 } }}>
+      <Card sx={{ width: '100%', maxWidth: 470 }}>
+        <CardContent component="form" onSubmit={onSubmit} sx={{ p: { xs: 1.5, md: 2 } }}>
+          <Typography variant="overline" sx={{ color: 'secondary.main', fontWeight: 700, letterSpacing: '0.12em' }}>
+            Join Astra Attire
+          </Typography>
+          <Typography variant="h5" sx={{ mb: 0.7 }}>
+            Create Your Account
           </Typography>
 
           <Stack spacing={1.6}>
@@ -87,3 +90,4 @@ const RegisterPage = () => {
 };
 
 export default RegisterPage;
+

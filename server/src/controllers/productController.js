@@ -15,6 +15,60 @@ const normalizeList = (value) => {
   return [];
 };
 
+const normalizeVariants = (value) => {
+  let parsed = value;
+
+  if (!value) return [];
+
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((variant) => {
+      const size = String(variant?.size || '').trim();
+      const color = String(variant?.color || '').trim();
+      const price = Number(variant?.price);
+      const stock = Number(variant?.stock);
+
+      if (!size || Number.isNaN(price) || price < 0 || Number.isNaN(stock) || stock < 0) {
+        return null;
+      }
+
+      return {
+        size,
+        color,
+        price,
+        stock
+      };
+    })
+    .filter(Boolean);
+};
+
+const getVariantMeta = (variants) => {
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return null;
+  }
+
+  const sizes = [...new Set(variants.map((variant) => variant.size))];
+  const colors = [...new Set(variants.map((variant) => variant.color).filter(Boolean))];
+  const countInStock = variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
+  const minPrice = variants.reduce((min, variant) => (variant.price < min ? variant.price : min), variants[0].price);
+
+  return {
+    sizes,
+    colors,
+    countInStock,
+    minPrice
+  };
+};
+
 const getProducts = async (req, res) => {
   const { search, category, gender, size, color, minPrice, maxPrice, sort = 'newest' } = req.query;
 
@@ -89,14 +143,28 @@ const createProduct = async (req, res) => {
     gender,
     sizes,
     colors,
+    variants,
     material,
     fit,
     price,
     countInStock
   } = req.body;
 
-  if (!name || !description || !category || price === undefined) {
+  const normalizedVariants = normalizeVariants(variants);
+  const variantMeta = getVariantMeta(normalizedVariants);
+  const hasVariants = Boolean(variantMeta);
+
+  if (!name || !description || !category || (!hasVariants && price === undefined)) {
     return res.status(400).json({ message: 'Name, description, category and price are required' });
+  }
+
+  const normalizedSizes = hasVariants ? variantMeta.sizes : normalizeList(sizes);
+  const normalizedColors = hasVariants ? variantMeta.colors : normalizeList(colors);
+  const resolvedPrice = hasVariants ? variantMeta.minPrice : Number(price);
+  const resolvedStock = hasVariants ? variantMeta.countInStock : Number(countInStock ?? 0);
+
+  if (!hasVariants && (Number.isNaN(resolvedPrice) || resolvedPrice < 0)) {
+    return res.status(400).json({ message: 'Price must be a valid positive number' });
   }
 
   const product = await Product.create({
@@ -106,12 +174,13 @@ const createProduct = async (req, res) => {
     brand,
     category,
     gender,
-    sizes: normalizeList(sizes),
-    colors: normalizeList(colors),
+    sizes: normalizedSizes,
+    colors: normalizedColors,
+    variants: normalizedVariants,
     material,
     fit,
-    price,
-    countInStock: countInStock ?? 0
+    price: resolvedPrice,
+    countInStock: resolvedStock
   });
 
   return res.status(201).json(product);
@@ -148,6 +217,20 @@ const updateProduct = async (req, res) => {
 
   if (req.body.colors !== undefined) {
     product.colors = normalizeList(req.body.colors);
+  }
+
+  if (req.body.variants !== undefined) {
+    const normalizedVariants = normalizeVariants(req.body.variants);
+    product.variants = normalizedVariants;
+
+    const variantMeta = getVariantMeta(normalizedVariants);
+
+    if (variantMeta) {
+      product.sizes = variantMeta.sizes;
+      product.colors = variantMeta.colors;
+      product.price = variantMeta.minPrice;
+      product.countInStock = variantMeta.countInStock;
+    }
   }
 
   const updatedProduct = await product.save();

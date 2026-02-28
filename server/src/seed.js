@@ -1,4 +1,4 @@
-const dotenv = require('dotenv');
+﻿const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const User = require('./models/User');
 const Product = require('./models/Product');
@@ -7,6 +7,48 @@ dotenv.config();
 
 const sampleProducts = [
   {
+    name: 'Nike Air Max Pulse',
+    description: 'Breathable running-inspired Nike shoes with responsive cushioning for all-day comfort.',
+    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80',
+    brand: 'Nike',
+    category: 'Shoes',
+    gender: 'Men',
+    sizes: ['7', '8', '9', '10', '11'],
+    colors: ['Black/White'],
+    material: 'Mesh + Rubber',
+    fit: 'Regular',
+    variants: [
+      { size: '7', color: 'Black/White', price: 6499, stock: 4 },
+      { size: '8', color: 'Black/White', price: 6699, stock: 6 },
+      { size: '9', color: 'Black/White', price: 6899, stock: 7 },
+      { size: '10', color: 'Black/White', price: 7099, stock: 5 },
+      { size: '11', color: 'Black/White', price: 7299, stock: 3 }
+    ],
+    price: 6499,
+    countInStock: 25
+  },
+  {
+    name: 'Nike Court Vision Low',
+    description: 'Classic low-top sneaker silhouette with durable outsole and clean Nike styling.',
+    image: 'https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?auto=format&fit=crop&w=900&q=80',
+    brand: 'Nike',
+    category: 'Shoes',
+    gender: 'Unisex',
+    sizes: ['6', '7', '8', '9', '10'],
+    colors: ['White/Green'],
+    material: 'Synthetic Leather',
+    fit: 'Regular',
+    variants: [
+      { size: '6', color: 'White/Green', price: 5399, stock: 5 },
+      { size: '7', color: 'White/Green', price: 5499, stock: 7 },
+      { size: '8', color: 'White/Green', price: 5599, stock: 8 },
+      { size: '9', color: 'White/Green', price: 5799, stock: 6 },
+      { size: '10', color: 'White/Green', price: 5999, stock: 4 }
+    ],
+    price: 5399,
+    countInStock: 30
+  },
+  {
     name: 'Linen Resort Shirt',
     description: 'Breathable premium linen shirt with relaxed fit for warm-weather styling.',
     image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80',
@@ -14,11 +56,19 @@ const sampleProducts = [
     category: 'Shirts',
     gender: 'Men',
     sizes: ['S', 'M', 'L', 'XL'],
-    colors: ['White', 'Sage', 'Sky Blue'],
+    colors: ['White', 'Sage'],
     material: 'Linen',
     fit: 'Relaxed',
-    price: 1999,
-    countInStock: 28
+    variants: [
+      { size: 'S', color: 'White', price: 1799, stock: 6 },
+      { size: 'M', color: 'White', price: 1899, stock: 8 },
+      { size: 'L', color: 'White', price: 1999, stock: 7 },
+      { size: 'XL', color: 'White', price: 2099, stock: 4 },
+      { size: 'M', color: 'Sage', price: 1949, stock: 5 },
+      { size: 'L', color: 'Sage', price: 2049, stock: 5 }
+    ],
+    price: 1799,
+    countInStock: 35
   },
   {
     name: 'Oversized Graphic Tee',
@@ -31,8 +81,16 @@ const sampleProducts = [
     colors: ['Black', 'Off White', 'Charcoal'],
     material: 'Cotton',
     fit: 'Oversized',
-    price: 1099,
-    countInStock: 40
+    variants: [
+      { size: 'S', color: 'Black', price: 999, stock: 10 },
+      { size: 'M', color: 'Black', price: 1099, stock: 12 },
+      { size: 'L', color: 'Black', price: 1149, stock: 11 },
+      { size: 'XL', color: 'Black', price: 1199, stock: 8 },
+      { size: 'M', color: 'Off White', price: 1129, stock: 8 },
+      { size: 'L', color: 'Off White', price: 1179, stock: 7 }
+    ],
+    price: 999,
+    countInStock: 56
   },
   {
     name: 'High Rise Wide-Leg Jeans',
@@ -45,21 +103,14 @@ const sampleProducts = [
     colors: ['Indigo', 'Washed Blue'],
     material: 'Denim',
     fit: 'Wide Leg',
-    price: 2499,
-    countInStock: 22
-  },
-  {
-    name: 'Tailored Formal Trousers',
-    description: 'Lightweight formal trousers with slight taper and wrinkle resistance.',
-    image: 'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
-    category: 'Trousers',
-    gender: 'Men',
-    sizes: ['30', '32', '34', '36', '38'],
-    colors: ['Navy', 'Stone', 'Black'],
-    material: 'Poly-Viscose Blend',
-    fit: 'Tailored',
-    price: 2199,
+    variants: [
+      { size: '26', color: 'Indigo', price: 2299, stock: 4 },
+      { size: '28', color: 'Indigo', price: 2399, stock: 6 },
+      { size: '30', color: 'Indigo', price: 2499, stock: 7 },
+      { size: '32', color: 'Indigo', price: 2599, stock: 5 },
+      { size: '34', color: 'Indigo', price: 2699, stock: 4 }
+    ],
+    price: 2299,
     countInStock: 26
   },
   {
@@ -70,39 +121,18 @@ const sampleProducts = [
     category: 'Dresses',
     gender: 'Women',
     sizes: ['XS', 'S', 'M', 'L'],
-    colors: ['Coral', 'Teal', 'Floral Ivory'],
+    colors: ['Coral', 'Teal'],
     material: 'Viscose',
     fit: 'Regular',
-    price: 2799,
-    countInStock: 18
-  },
-  {
-    name: 'Quilted Bomber Jacket',
-    description: 'Seasonal bomber jacket with soft lining and matte finish shell.',
-    image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
-    category: 'Jackets',
-    gender: 'Unisex',
-    sizes: ['S', 'M', 'L', 'XL'],
-    colors: ['Olive', 'Black', 'Sand'],
-    material: 'Nylon Blend',
-    fit: 'Regular',
-    price: 3499,
-    countInStock: 14
-  },
-  {
-    name: 'Ribbed Crop Top',
-    description: 'Stretch ribbed crop top for everyday pairing with high-rise bottoms.',
-    image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
-    category: 'Tops',
-    gender: 'Women',
-    sizes: ['XS', 'S', 'M', 'L'],
-    colors: ['Mocha', 'Ivory', 'Black'],
-    material: 'Cotton-Spandex',
-    fit: 'Slim',
-    price: 899,
-    countInStock: 32
+    variants: [
+      { size: 'XS', color: 'Coral', price: 2399, stock: 3 },
+      { size: 'S', color: 'Coral', price: 2499, stock: 5 },
+      { size: 'M', color: 'Coral', price: 2599, stock: 6 },
+      { size: 'L', color: 'Coral', price: 2699, stock: 4 },
+      { size: 'M', color: 'Teal', price: 2649, stock: 5 }
+    ],
+    price: 2399,
+    countInStock: 23
   },
   {
     name: 'Athleisure Joggers',
@@ -112,11 +142,19 @@ const sampleProducts = [
     category: 'Activewear',
     gender: 'Unisex',
     sizes: ['S', 'M', 'L', 'XL'],
-    colors: ['Grey', 'Black', 'Navy'],
+    colors: ['Grey', 'Black'],
     material: 'Cotton Fleece',
     fit: 'Regular',
-    price: 1599,
-    countInStock: 36
+    variants: [
+      { size: 'S', color: 'Grey', price: 1399, stock: 6 },
+      { size: 'M', color: 'Grey', price: 1499, stock: 8 },
+      { size: 'L', color: 'Grey', price: 1599, stock: 9 },
+      { size: 'XL', color: 'Grey', price: 1699, stock: 5 },
+      { size: 'M', color: 'Black', price: 1549, stock: 7 },
+      { size: 'L', color: 'Black', price: 1649, stock: 6 }
+    ],
+    price: 1399,
+    countInStock: 41
   },
   {
     name: 'Classic Polo Shirt',
@@ -131,20 +169,6 @@ const sampleProducts = [
     fit: 'Regular',
     price: 1299,
     countInStock: 30
-  },
-  {
-    name: 'Pleated Co-ord Skirt',
-    description: 'Light pleated skirt designed for effortless contemporary styling.',
-    image: 'https://images.unsplash.com/photo-1583496661160-fb5886a13d46?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
-    category: 'Skirts',
-    gender: 'Women',
-    sizes: ['XS', 'S', 'M', 'L'],
-    colors: ['Mint', 'Black', 'Beige'],
-    material: 'Poly Crepe',
-    fit: 'A-Line',
-    price: 1899,
-    countInStock: 20
   }
 ];
 

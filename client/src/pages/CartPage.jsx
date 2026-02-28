@@ -1,4 +1,4 @@
-import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+﻿import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import {
   Alert,
@@ -6,12 +6,14 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Divider,
   MenuItem,
   Stack,
   TextField,
   Typography
 } from '@mui/material';
+import PageHeader from '../components/PageHeader';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -29,49 +31,43 @@ const CartPage = () => {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 2 }}>
-        Your Shopping Bag
-      </Typography>
+      <PageHeader
+        eyebrow="Cart"
+        title="Your Shopping Bag"
+        subtitle="Review selected products, variants and quantities before checkout."
+      />
 
       {items.length === 0 && (
-        <Alert severity="info" sx={{ borderRadius: 3 }}>
+        <Alert severity="info">
           Bag is empty. <RouterLink to="/">Continue shopping</RouterLink>
         </Alert>
       )}
 
       {items.length > 0 && (
-        <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2.2} alignItems="flex-start">
+        <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2.2} alignItems="flex-start">
           <Stack spacing={1.4} sx={{ width: '100%', flex: 1 }}>
             {items.map((item) => (
-              <Card key={item.cartKey} sx={{ borderRadius: 3 }}>
+              <Card key={item.cartKey}>
                 <CardContent>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
                     <Box
                       component="img"
                       src={item.image}
                       alt={item.name}
-                      sx={{ width: 96, height: 116, borderRadius: 2, objectFit: 'cover' }}
+                      sx={{ width: 84, height: 100, objectFit: 'cover' }}
                     />
 
                     <Box sx={{ flex: 1 }}>
                       <Typography component={RouterLink} to={`/products/${item.productId}`} sx={{ textDecoration: 'none' }} variant="h6">
                         {item.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.3 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
                         {formatINR(item.price)} each
                       </Typography>
 
-                      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                        {item.selectedSize && (
-                          <Typography variant="caption" sx={{ bgcolor: 'grey.100', px: 1, py: 0.5, borderRadius: 2 }}>
-                            Size: {item.selectedSize}
-                          </Typography>
-                        )}
-                        {item.selectedColor && (
-                          <Typography variant="caption" sx={{ bgcolor: 'grey.100', px: 1, py: 0.5, borderRadius: 2 }}>
-                            Color: {item.selectedColor}
-                          </Typography>
-                        )}
+                      <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                        {item.selectedSize && <Chip size="small" label={`Size: ${item.selectedSize}`} />}
+                        {item.selectedColor && <Chip size="small" label={`Color: ${item.selectedColor}`} variant="outlined" />}
                       </Stack>
                     </Box>
 
@@ -104,7 +100,7 @@ const CartPage = () => {
             ))}
           </Stack>
 
-          <Card sx={{ width: { xs: '100%', lg: 360 }, borderRadius: 3, position: { lg: 'sticky' }, top: { lg: 96 } }}>
+          <Card sx={{ width: { xs: '100%', xl: 320 } }}>
             <CardContent>
               <Typography variant="h6">Order Summary</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -115,7 +111,7 @@ const CartPage = () => {
                 {formatINR(subtotal)}
               </Typography>
               <Button variant="contained" fullWidth startIcon={<ShoppingBagOutlinedIcon />} onClick={proceedToCheckout}>
-                Checkout
+                Proceed to Checkout
               </Button>
             </CardContent>
           </Card>
@@ -126,3 +122,4 @@ const CartPage = () => {
 };
 
 export default CartPage;
+

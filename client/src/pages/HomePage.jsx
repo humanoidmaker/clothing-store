@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -7,9 +7,9 @@ import {
   CardContent,
   CircularProgress,
   FormControl,
-  Grid,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Slider,
   Stack,
@@ -18,14 +18,15 @@ import {
 } from '@mui/material';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
+import PageHeader from '../components/PageHeader';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
 import { formatINR } from '../utils/currency';
 
-const categoryOptions = ['All', 'T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts'];
+const categoryOptions = ['All', 'T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
 const genderOptions = ['All', 'Men', 'Women', 'Unisex'];
-const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '26', '28', '30', '32', '34', '36', '38'];
-const colorOptions = ['Black', 'White', 'Navy', 'Grey', 'Beige', 'Olive', 'Maroon', 'Blue', 'Sky Blue', 'Mint', 'Coral'];
+const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '26', '28', '30', '32', '34', '36', '38', '6', '7', '8', '9', '10', '11'];
+const colorOptions = ['Black', 'White', 'Navy', 'Grey', 'Beige', 'Olive', 'Maroon', 'Blue', 'Sky Blue', 'Mint', 'Coral', 'Off White', 'Red', 'Green'];
 const sortOptions = [
   { value: 'newest', label: 'Newest First' },
   { value: 'price_asc', label: 'Price: Low to High' },
@@ -39,7 +40,7 @@ const initialFilters = {
   gender: 'All',
   size: '',
   color: '',
-  priceRange: [500, 5000],
+  priceRange: [500, 8000],
   sort: 'newest'
 };
 
@@ -83,7 +84,7 @@ const HomePage = () => {
   const heading = useMemo(() => {
     if (products.length === 0) return 'No Styles Found';
     if (appliedFilters.search || appliedFilters.category !== 'All' || appliedFilters.gender !== 'All') return 'Filtered Styles';
-    return 'Trending This Week';
+    return 'All Products';
   }, [products.length, appliedFilters]);
 
   const applyFilters = () => {
@@ -97,49 +98,61 @@ const HomePage = () => {
 
   return (
     <Box>
-      <Card
+      <Paper
+        variant="outlined"
         sx={{
-          mb: 3,
-          borderRadius: 4,
-          color: 'common.white',
-          background:
-            'linear-gradient(110deg, rgba(31,58,95,0.95), rgba(193,91,115,0.9)), url(https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=1400&q=80)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
+          p: 1.1,
+          mb: 1.2,
+          borderLeft: '4px solid',
+          borderColor: 'secondary.main',
+          bgcolor: 'background.paper'
         }}
       >
-        <CardContent sx={{ p: { xs: 3, md: 5 } }}>
-          <Typography variant="h3" sx={{ mb: 1 }}>
-            Curated Fashion in One Place
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={0.6}>
+          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.08em' }}>
+            STYLE DESK
           </Typography>
-          <Typography variant="body1" sx={{ maxWidth: 640, opacity: 0.92 }}>
-            Discover premium shirts, dresses, denim and street staples. Filter by category, fit and color to find the exact look.
+          <Typography variant="caption" color="text.secondary">
+            New drops weekly • curated for compact browsing
           </Typography>
-        </CardContent>
-      </Card>
+        </Stack>
+      </Paper>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderRadius: 4, position: { md: 'sticky' }, top: { md: 96 } }}>
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                <Typography variant="h6">Filters</Typography>
-                <TuneOutlinedIcon color="action" />
+      <PageHeader
+        eyebrow="Store"
+        title={heading}
+        subtitle="Filter by category, size, color and price with a fixed desktop sidebar."
+        actions={<Typography color="text.secondary">{products.length} items</Typography>}
+      />
+
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 1.2,
+          gridTemplateColumns: { xs: '1fr', md: '260px minmax(0, 1fr)' },
+          alignItems: 'start'
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Card sx={{ position: { md: 'sticky' }, top: { md: 68 } }}>
+            <CardContent sx={{ p: 1.2 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.2 }}>
+                <Typography variant="subtitle1">Filters</Typography>
+                <TuneOutlinedIcon color="action" fontSize="small" />
               </Stack>
 
-              <Stack spacing={2}>
+              <Stack spacing={1.1}>
                 <TextField
                   label="Search"
-                  placeholder="shirt, denim, dress"
+                  placeholder="shirt, denim"
                   value={filters.search}
                   onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
                   size="small"
                 />
 
                 <FormControl size="small">
-                  <InputLabel id="category-label">Category</InputLabel>
+                  <InputLabel>Category</InputLabel>
                   <Select
-                    labelId="category-label"
                     value={filters.category}
                     label="Category"
                     onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
@@ -153,9 +166,8 @@ const HomePage = () => {
                 </FormControl>
 
                 <FormControl size="small">
-                  <InputLabel id="gender-label">Gender</InputLabel>
+                  <InputLabel>Gender</InputLabel>
                   <Select
-                    labelId="gender-label"
                     value={filters.gender}
                     label="Gender"
                     onChange={(event) => setFilters((current) => ({ ...current, gender: event.target.value }))}
@@ -169,9 +181,8 @@ const HomePage = () => {
                 </FormControl>
 
                 <FormControl size="small">
-                  <InputLabel id="size-label">Size</InputLabel>
+                  <InputLabel>Size</InputLabel>
                   <Select
-                    labelId="size-label"
                     value={filters.size}
                     label="Size"
                     onChange={(event) => setFilters((current) => ({ ...current, size: event.target.value }))}
@@ -186,9 +197,8 @@ const HomePage = () => {
                 </FormControl>
 
                 <FormControl size="small">
-                  <InputLabel id="color-label">Color</InputLabel>
+                  <InputLabel>Color</InputLabel>
                   <Select
-                    labelId="color-label"
                     value={filters.color}
                     label="Color"
                     onChange={(event) => setFilters((current) => ({ ...current, color: event.target.value }))}
@@ -203,25 +213,25 @@ const HomePage = () => {
                 </FormControl>
 
                 <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Price Range: {formatINR(filters.priceRange[0])} - {formatINR(filters.priceRange[1])}
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.6 }}>
+                    Price: {formatINR(filters.priceRange[0])} - {formatINR(filters.priceRange[1])}
                   </Typography>
                   <Slider
                     value={filters.priceRange}
                     onChange={(event, nextValue) => setFilters((current) => ({ ...current, priceRange: nextValue }))}
                     valueLabelDisplay="auto"
                     min={500}
-                    max={5000}
+                    max={8000}
                     step={100}
+                    size="small"
                   />
                 </Box>
 
                 <FormControl size="small">
-                  <InputLabel id="sort-label">Sort By</InputLabel>
+                  <InputLabel>Sort</InputLabel>
                   <Select
-                    labelId="sort-label"
                     value={filters.sort}
-                    label="Sort By"
+                    label="Sort"
                     onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value }))}
                   >
                     {sortOptions.map((option) => (
@@ -232,46 +242,53 @@ const HomePage = () => {
                   </Select>
                 </FormControl>
 
-                <Button variant="contained" onClick={applyFilters}>
-                  Apply Filters
-                </Button>
-                <Button variant="outlined" startIcon={<RestartAltOutlinedIcon />} onClick={resetFilters}>
-                  Reset
-                </Button>
+                <Stack direction="row" spacing={0.8}>
+                  <Button variant="contained" onClick={applyFilters} fullWidth>
+                    Apply
+                  </Button>
+                  <Button variant="outlined" startIcon={<RestartAltOutlinedIcon fontSize="small" />} onClick={resetFilters} fullWidth>
+                    Reset
+                  </Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
-        </Grid>
+        </Box>
 
-        <Grid item xs={12} md={9}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" sx={{ mb: 2 }}>
-            <Typography variant="h4">{heading}</Typography>
-            <Typography color="text.secondary">{products.length} items</Typography>
-          </Stack>
-
+        <Box sx={{ minWidth: 0 }}>
           {loading && (
-            <Stack alignItems="center" sx={{ py: 6 }}>
-              <CircularProgress />
+            <Stack alignItems="center" sx={{ py: 4 }}>
+              <CircularProgress size={28} />
             </Stack>
           )}
 
           {error && <Alert severity="error">{error}</Alert>}
 
           {!loading && !error && products.length === 0 && (
-            <Alert severity="info">No styles match the current filter selection.</Alert>
+            <Alert severity="info">No styles match the selected filters.</Alert>
           )}
 
           {!loading && !error && products.length > 0 && (
-            <Grid container spacing={2.2}>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 1,
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  sm: 'repeat(2, minmax(0, 1fr))',
+                  lg: 'repeat(3, minmax(0, 1fr))'
+                }
+              }}
+            >
               {products.map((product) => (
-                <Grid item xs={12} sm={6} lg={4} key={product._id}>
+                <Box key={product._id}>
                   <ProductCard product={product} />
-                </Grid>
+                </Box>
               ))}
-            </Grid>
+            </Box>
           )}
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Box>
   );
 };

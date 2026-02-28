@@ -11,6 +11,31 @@ const validateShippingAddress = (shippingAddress) => {
   return requiredKeys.every((key) => String(shippingAddress[key] || '').trim().length > 0);
 };
 
+const findVariantIndex = (product, selectedSize, selectedColor) => {
+  if (!Array.isArray(product.variants) || product.variants.length === 0) {
+    return -1;
+  }
+
+  if (!selectedSize) {
+    return -1;
+  }
+
+  const matchesBySize = product.variants
+    .map((variant, index) => ({ variant, index }))
+    .filter((entry) => entry.variant.size === selectedSize);
+
+  if (matchesBySize.length === 0) {
+    return -1;
+  }
+
+  if (!selectedColor) {
+    return matchesBySize[0].index;
+  }
+
+  const exactColor = matchesBySize.find((entry) => String(entry.variant.color || '') === selectedColor);
+  return exactColor ? exactColor.index : -1;
+};
+
 const prepareOrderItems = async (items) => {
   if (!Array.isArray(items) || items.length === 0) {
     return { error: { status: 400, message: 'Order items are required' } };
@@ -33,12 +58,11 @@ const prepareOrderItems = async (items) => {
       return { error: { status: 400, message: `Invalid quantity for ${product.name}` } };
     }
 
-    if (product.countInStock < quantity) {
-      return { error: { status: 400, message: `${product.name} is out of stock` } };
-    }
-
-    const selectedSize = String(item.selectedSize || '').trim();
-    const selectedColor = String(item.selectedColor || '').trim();
+    let selectedSize = String(item.selectedSize || '').trim();
+    let selectedColor = String(item.selectedColor || '').trim();
+    let unitPrice = Number(product.price);
+    let availableStock = Number(product.countInStock);
+    let variantIndex = -1;
 
     if (selectedSize && Array.isArray(product.sizes) && product.sizes.length > 0 && !product.sizes.includes(selectedSize)) {
       return { error: { status: 400, message: `Invalid size selected for ${product.name}` } };
@@ -53,18 +77,40 @@ const prepareOrderItems = async (items) => {
       return { error: { status: 400, message: `Invalid color selected for ${product.name}` } };
     }
 
+    if (Array.isArray(product.variants) && product.variants.length > 0) {
+      if (!selectedSize) {
+        return { error: { status: 400, message: `Please select size for ${product.name}` } };
+      }
+
+      variantIndex = findVariantIndex(product, selectedSize, selectedColor);
+      if (variantIndex < 0) {
+        return { error: { status: 400, message: `Selected variant not found for ${product.name}` } };
+      }
+
+      const variant = product.variants[variantIndex];
+      unitPrice = Number(variant.price);
+      availableStock = Number(variant.stock || 0);
+      if (!selectedColor && variant.color) {
+        selectedColor = variant.color;
+      }
+    }
+
+    if (availableStock < quantity) {
+      return { error: { status: 400, message: `${product.name} is out of stock for selected size` } };
+    }
+
     orderItems.push({
       product: product._id,
       name: product.name,
       image: product.image,
-      price: product.price,
+      price: unitPrice,
       quantity,
       selectedSize,
       selectedColor
     });
 
-    stockUpdates.push({ product, quantity });
-    totalPrice += product.price * quantity;
+    stockUpdates.push({ product, quantity, variantIndex });
+    totalPrice += unitPrice * quantity;
   }
 
   return { orderItems, stockUpdates, totalPrice };
@@ -72,7 +118,23 @@ const prepareOrderItems = async (items) => {
 
 const deductStock = async (stockUpdates) => {
   for (const update of stockUpdates) {
-    update.product.countInStock -= update.quantity;
+    if (Number.isInteger(update.variantIndex) && update.variantIndex >= 0) {
+      const variant = update.product.variants[update.variantIndex];
+
+      if (!variant || Number(variant.stock) < update.quantity) {
+        throw new Error('Selected variant stock changed, please retry checkout');
+      }
+
+      variant.stock -= update.quantity;
+      update.product.markModified('variants');
+      update.product.countInStock = update.product.variants.reduce(
+        (sum, currentVariant) => sum + Number(currentVariant.stock || 0),
+        0
+      );
+    } else {
+      update.product.countInStock -= update.quantity;
+    }
+
     await update.product.save();
   }
 };
@@ -91,7 +153,11 @@ const createStoredOrder = async ({
     return { error: prepared.error };
   }
 
-  await deductStock(prepared.stockUpdates);
+  try {
+    await deductStock(prepared.stockUpdates);
+  } catch (error) {
+    return { error: { status: 400, message: error.message || 'Unable to reserve stock for order' } };
+  }
 
   const order = await Order.create({
     user: userId,

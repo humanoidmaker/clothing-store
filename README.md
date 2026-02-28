@@ -15,7 +15,9 @@ This project is now fashion-specific (not general-purpose ecommerce):
 - Material UI based storefront with a styled theme
 - Advanced filters: search, category, gender, size, color, price range, sorting
 - Product detail variant selection (size + color)
+- Variant pricing support: each size/color can have different price + stock
 - Cart stores variants as separate line items
+- Product detail page supports choosing size/color before adding to cart
 
 ## Project structure
 
@@ -71,4 +73,6 @@ This project is now fashion-specific (not general-purpose ecommerce):
 ## Notes
 
 - Prices are stored/displayed in INR.
+- Seeded sample catalog includes Nike shoes with size-wise pricing.
+- Admin can create variant pricing with `variants` JSON (`size`, `color`, `price`, `stock`).
 - If you previously seeded older products, run `npm run seed` again to load the new clothing dataset.

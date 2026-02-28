@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+﻿import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 const CartContext = createContext(null);
 
@@ -17,6 +17,19 @@ const parseCart = () => {
 const getCartKey = (productId, selectedSize, selectedColor) =>
   `${productId}__${selectedSize || 'nosize'}__${selectedColor || 'nocolor'}`;
 
+const findVariant = (product, selectedSize, selectedColor) => {
+  if (!Array.isArray(product?.variants) || product.variants.length === 0) {
+    return null;
+  }
+
+  const sizeMatched = product.variants.filter((variant) => variant.size === selectedSize);
+  if (sizeMatched.length === 0) return null;
+
+  if (!selectedColor) return sizeMatched[0];
+
+  return sizeMatched.find((variant) => (variant.color || '') === selectedColor) || null;
+};
+
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState(parseCart);
 
@@ -24,9 +37,19 @@ export const CartProvider = ({ children }) => {
     localStorage.setItem('cart', JSON.stringify(items));
   }, [items]);
 
-  const addToCart = (product, quantity = 1, selectedSize = '', selectedColor = '') => {
+  const addToCart = (
+    product,
+    quantity = 1,
+    selectedSize = '',
+    selectedColor = '',
+    unitPrice,
+    stockLimit
+  ) => {
     const safeQty = Math.max(1, Number(quantity || 1));
     const cartKey = getCartKey(product._id, selectedSize, selectedColor);
+    const selectedVariant = findVariant(product, selectedSize, selectedColor);
+    const resolvedPrice = Number(unitPrice ?? selectedVariant?.price ?? product.price);
+    const resolvedStock = Number(stockLimit ?? selectedVariant?.stock ?? product.countInStock ?? 999);
 
     setItems((current) => {
       const existing = current.find((item) => item.cartKey === cartKey);
@@ -36,7 +59,9 @@ export const CartProvider = ({ children }) => {
           item.cartKey === cartKey
             ? {
                 ...item,
-                quantity: Math.min(item.quantity + safeQty, product.countInStock || 999)
+                quantity: Math.min(item.quantity + safeQty, resolvedStock),
+                price: resolvedPrice,
+                countInStock: resolvedStock
               }
             : item
         );
@@ -49,11 +74,11 @@ export const CartProvider = ({ children }) => {
           productId: product._id,
           name: product.name,
           image: product.image,
-          price: product.price,
-          countInStock: product.countInStock,
+          price: resolvedPrice,
+          countInStock: resolvedStock,
           selectedSize,
           selectedColor,
-          quantity: Math.min(safeQty, product.countInStock || 999)
+          quantity: Math.min(safeQty, resolvedStock)
         }
       ];
     });
@@ -114,3 +139,4 @@ export const useCart = () => {
 
   return context;
 };
+

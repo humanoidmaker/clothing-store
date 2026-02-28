@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import PageHeader from '../components/PageHeader';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -42,6 +43,7 @@ const CheckoutPage = () => {
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Razorpay');
@@ -112,7 +114,7 @@ const CheckoutPage = () => {
             email: user?.email || ''
           },
           theme: {
-            color: '#1f3a5f'
+            color: '#172b4d'
           },
           modal: {
             ondismiss: () => reject(new Error('Payment cancelled'))
@@ -140,7 +142,7 @@ const CheckoutPage = () => {
 
   if (!canCheckout) {
     return (
-      <Alert severity="info" sx={{ borderRadius: 3 }}>
+      <Alert severity="info">
         Cart is empty. <RouterLink to="/">Shop styles</RouterLink>
       </Alert>
     );
@@ -148,17 +150,15 @@ const CheckoutPage = () => {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 2 }}>
-        Checkout
-      </Typography>
+      <PageHeader
+        eyebrow="Checkout"
+        title="Shipping and Payment"
+        subtitle="Securely complete your order with Razorpay or Cash on Delivery."
+      />
 
-      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2.2} alignItems="flex-start">
-        <Card sx={{ borderRadius: 3, width: '100%', flex: 1 }}>
+      <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2.2} alignItems="flex-start">
+        <Card sx={{ width: '100%', flex: 1 }}>
           <CardContent component="form" onSubmit={onSubmit}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Shipping & Payment
-            </Typography>
-
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <FormControl fullWidth>
@@ -218,7 +218,7 @@ const CheckoutPage = () => {
           </CardContent>
         </Card>
 
-        <Card sx={{ width: { xs: '100%', lg: 380 }, borderRadius: 3, position: { lg: 'sticky' }, top: { lg: 96 } }}>
+        <Card sx={{ width: { xs: '100%', xl: 340 } }}>
           <CardContent>
             <Typography variant="h6">Order Review</Typography>
             <Divider sx={{ my: 1.5 }} />
@@ -250,3 +250,4 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
+
