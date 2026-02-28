@@ -15,8 +15,10 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Typography
+  Typography,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import PageHeader from '../components/PageHeader';
 import AppPagination from '../components/AppPagination';
 import api from '../api';
@@ -41,6 +43,8 @@ const toLabel = (status) => {
 };
 
 const AdminOrdersPage = () => {
+  const theme = useTheme();
+  const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -209,97 +213,185 @@ const AdminOrdersPage = () => {
           )}
 
           {!loading && filteredOrders.length > 0 && (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Order</TableCell>
-                  <TableCell>Customer</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Items</TableCell>
-                  <TableCell align="right">Total</TableCell>
-                  <TableCell>Current</TableCell>
-                  <TableCell>Change Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedItems.map((order) => {
-                  const selectedStatus = orderStatusDrafts[order._id] || order.status;
-                  const itemNames = (order.orderItems || [])
-                    .slice(0, 2)
-                    .map((item) => `${item.name} x${item.quantity}`)
-                    .join(', ');
-                  const extraItemCount = Math.max(0, (order.orderItems || []).length - 2);
-                  const isSameStatus = selectedStatus === order.status;
+            <>
+              {isMobileTable ? (
+                <Stack spacing={0.8}>
+                  {paginatedItems.map((order) => {
+                    const selectedStatus = orderStatusDrafts[order._id] || order.status;
+                    const itemNames = (order.orderItems || [])
+                      .slice(0, 2)
+                      .map((item) => `${item.name} x${item.quantity}`)
+                      .join(', ');
+                    const extraItemCount = Math.max(0, (order.orderItems || []).length - 2);
+                    const isSameStatus = selectedStatus === order.status;
 
-                  return (
-                    <TableRow key={order._id} hover>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                          {order._id.slice(-8).toUpperCase()}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {order.paymentMethod}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{order.user?.name || 'Guest'}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {order.user?.email || '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{new Date(order.createdAt).toLocaleDateString('en-IN')}</TableCell>
-                      <TableCell sx={{ minWidth: 220 }}>
-                        <Typography variant="body2">{itemNames || '-'}</Typography>
-                        {extraItemCount > 0 && (
-                          <Typography variant="caption" color="text.secondary">
-                            +{extraItemCount} more item(s)
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={order.status}
-                          size="small"
-                          color={statusColorMap[order.status] || 'default'}
-                          sx={{ textTransform: 'capitalize' }}
-                        />
-                      </TableCell>
-                      <TableCell sx={{ minWidth: 220 }}>
-                        <Stack direction="row" spacing={0.6}>
-                          <TextField
-                            select
-                            size="small"
-                            value={selectedStatus}
-                            onChange={(event) => onStatusDraftChange(order._id, event.target.value)}
-                            sx={{ minWidth: 130 }}
-                          >
-                            {updateStatuses.map((status) => (
-                              <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>
-                                {status}
-                              </MenuItem>
-                            ))}
-                          </TextField>
-                          <Button
-                            variant="contained"
-                            size="small"
-                            disabled={isSameStatus || statusUpdatingId === order._id}
-                            startIcon={
-                              statusUpdatingId === order._id
-                                ? <CircularProgress size={14} color="inherit" />
-                                : undefined
-                            }
-                            onClick={() => onUpdateOrderStatus(order._id)}
-                          >
-                            {statusUpdatingId === order._id ? 'Updating...' : 'Update'}
-                          </Button>
-                        </Stack>
-                      </TableCell>
+                    return (
+                      <Card key={order._id} variant="outlined">
+                        <CardContent sx={{ p: 1 }}>
+                          <Stack spacing={0.7}>
+                            <Stack direction="row" justifyContent="space-between" spacing={0.8}>
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                  {order._id.slice(-8).toUpperCase()}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(order.createdAt).toLocaleDateString('en-IN')} • {order.paymentMethod}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                label={order.status}
+                                size="small"
+                                color={statusColorMap[order.status] || 'default'}
+                                sx={{ textTransform: 'capitalize' }}
+                              />
+                            </Stack>
+
+                            <Box>
+                              <Typography variant="body2">{order.user?.name || 'Guest'}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {order.user?.email || '-'}
+                              </Typography>
+                            </Box>
+
+                            <Typography variant="body2">
+                              {itemNames || '-'}
+                              {extraItemCount > 0 ? ` (+${extraItemCount} more)` : ''}
+                            </Typography>
+
+                            <Stack direction="row" justifyContent="space-between">
+                              <Typography variant="caption" color="text.secondary">Total</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(order.totalPrice)}</Typography>
+                            </Stack>
+
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.6}>
+                              <TextField
+                                select
+                                size="small"
+                                value={selectedStatus}
+                                onChange={(event) => onStatusDraftChange(order._id, event.target.value)}
+                                fullWidth
+                              >
+                                {updateStatuses.map((status) => (
+                                  <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>
+                                    {status}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                disabled={isSameStatus || statusUpdatingId === order._id}
+                                startIcon={
+                                  statusUpdatingId === order._id
+                                    ? <CircularProgress size={14} color="inherit" />
+                                    : undefined
+                                }
+                                onClick={() => onUpdateOrderStatus(order._id)}
+                                fullWidth
+                              >
+                                {statusUpdatingId === order._id ? 'Updating...' : 'Update'}
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Stack>
+              ) : (
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Order</TableCell>
+                      <TableCell>Customer</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Items</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                      <TableCell>Current</TableCell>
+                      <TableCell>Change Status</TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                  </TableHead>
+                  <TableBody>
+                    {paginatedItems.map((order) => {
+                      const selectedStatus = orderStatusDrafts[order._id] || order.status;
+                      const itemNames = (order.orderItems || [])
+                        .slice(0, 2)
+                        .map((item) => `${item.name} x${item.quantity}`)
+                        .join(', ');
+                      const extraItemCount = Math.max(0, (order.orderItems || []).length - 2);
+                      const isSameStatus = selectedStatus === order.status;
+
+                      return (
+                        <TableRow key={order._id} hover>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              {order._id.slice(-8).toUpperCase()}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {order.paymentMethod}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{order.user?.name || 'Guest'}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {order.user?.email || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{new Date(order.createdAt).toLocaleDateString('en-IN')}</TableCell>
+                          <TableCell sx={{ minWidth: 220 }}>
+                            <Typography variant="body2">{itemNames || '-'}</Typography>
+                            {extraItemCount > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                +{extraItemCount} more item(s)
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={order.status}
+                              size="small"
+                              color={statusColorMap[order.status] || 'default'}
+                              sx={{ textTransform: 'capitalize' }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ minWidth: 220 }}>
+                            <Stack direction="row" spacing={0.6}>
+                              <TextField
+                                select
+                                size="small"
+                                value={selectedStatus}
+                                onChange={(event) => onStatusDraftChange(order._id, event.target.value)}
+                                sx={{ minWidth: 130 }}
+                              >
+                                {updateStatuses.map((status) => (
+                                  <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>
+                                    {status}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                disabled={isSameStatus || statusUpdatingId === order._id}
+                                startIcon={
+                                  statusUpdatingId === order._id
+                                    ? <CircularProgress size={14} color="inherit" />
+                                    : undefined
+                                }
+                                onClick={() => onUpdateOrderStatus(order._id)}
+                              >
+                                {statusUpdatingId === order._id ? 'Updating...' : 'Update'}
+                              </Button>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </>
           )}
 
           {!loading && filteredOrders.length > 0 && (

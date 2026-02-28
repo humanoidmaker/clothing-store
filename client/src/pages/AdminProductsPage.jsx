@@ -263,6 +263,7 @@ const readValidatedImages = async (files, profileKey = 'product') => {
 const AdminProductsPage = () => {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
   const { storeName } = useStoreSettings();
 
   const [products, setProducts] = useState([]);
@@ -623,55 +624,116 @@ const AdminProductsPage = () => {
           {!loadingProducts && products.length === 0 && <Alert severity="info">No products yet.</Alert>}
 
           {!loadingProducts && products.length > 0 && (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Category</TableCell>
-                  <TableCell>Gender</TableCell>
-                  <TableCell align="right">Price</TableCell>
-                  <TableCell align="right">Stock</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product._id} hover>
-                    <TableCell>{product.name}</TableCell>
-                    <TableCell>{product.category}</TableCell>
-                    <TableCell>{product.gender}</TableCell>
-                    <TableCell align="right">{formatINR(product.price)}</TableCell>
-                    <TableCell align="right">{product.countInStock}</TableCell>
-                    <TableCell align="right">
-                      <Stack direction="row" spacing={0.6} justifyContent="flex-end">
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<EditOutlinedIcon />}
-                          onClick={() => onEdit(product)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          size="small"
-                          startIcon={
-                            deletingProductId === product._id
-                              ? <CircularProgress size={14} color="inherit" />
-                              : <DeleteOutlineOutlinedIcon />
-                          }
-                          disabled={deletingProductId === product._id}
-                          onClick={() => onDelete(product._id)}
-                        >
-                          {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
-                        </Button>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              {isMobileTable ? (
+                <Stack spacing={0.8}>
+                  {products.map((product) => (
+                    <Card key={product._id} variant="outlined">
+                      <CardContent sx={{ p: 1 }}>
+                        <Stack spacing={0.7}>
+                          <Stack direction="row" justifyContent="space-between" spacing={0.8} alignItems="flex-start">
+                            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                              {product.name}
+                            </Typography>
+                            <Chip size="small" label={product.gender || '-'} variant="outlined" color="secondary" />
+                          </Stack>
+
+                          <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+                            <Chip size="small" label={product.category || '-'} />
+                          </Stack>
+
+                          <Stack direction="row" justifyContent="space-between">
+                            <Typography variant="caption" color="text.secondary">Price</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(product.price)}</Typography>
+                          </Stack>
+                          <Stack direction="row" justifyContent="space-between">
+                            <Typography variant="caption" color="text.secondary">Stock</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{product.countInStock}</Typography>
+                          </Stack>
+
+                          <Stack direction="row" spacing={0.6}>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              fullWidth
+                              startIcon={<EditOutlinedIcon />}
+                              onClick={() => onEdit(product)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              fullWidth
+                              startIcon={
+                                deletingProductId === product._id
+                                  ? <CircularProgress size={14} color="inherit" />
+                                  : <DeleteOutlineOutlinedIcon />
+                              }
+                              disabled={deletingProductId === product._id}
+                              onClick={() => onDelete(product._id)}
+                            >
+                              {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Stack>
+              ) : (
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Category</TableCell>
+                      <TableCell>Gender</TableCell>
+                      <TableCell align="right">Price</TableCell>
+                      <TableCell align="right">Stock</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {products.map((product) => (
+                      <TableRow key={product._id} hover>
+                        <TableCell>{product.name}</TableCell>
+                        <TableCell>{product.category}</TableCell>
+                        <TableCell>{product.gender}</TableCell>
+                        <TableCell align="right">{formatINR(product.price)}</TableCell>
+                        <TableCell align="right">{product.countInStock}</TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={0.6} justifyContent="flex-end">
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<EditOutlinedIcon />}
+                              onClick={() => onEdit(product)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              startIcon={
+                                deletingProductId === product._id
+                                  ? <CircularProgress size={14} color="inherit" />
+                                  : <DeleteOutlineOutlinedIcon />
+                              }
+                              disabled={deletingProductId === product._id}
+                              onClick={() => onDelete(product._id)}
+                            >
+                              {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </>
           )}
 
           {!loadingProducts && products.length > 0 && (

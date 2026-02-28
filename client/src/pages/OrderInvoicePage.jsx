@@ -14,8 +14,10 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Typography
+  Typography,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import LocalPrintshopOutlinedIcon from '@mui/icons-material/LocalPrintshopOutlined';
 import { Link as RouterLink, useParams } from 'react-router-dom';
@@ -53,6 +55,8 @@ const formatDateTime = (value) => {
 };
 
 const OrderInvoicePage = () => {
+  const theme = useTheme();
+  const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
   const { id } = useParams();
   const { storeName } = useStoreSettings();
   const [order, setOrder] = useState(null);
@@ -233,46 +237,92 @@ const OrderInvoicePage = () => {
 
           <Divider sx={{ my: 1.2 }} />
 
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Item</TableCell>
-                  <TableCell>Details</TableCell>
-                  <TableCell align="right">Qty</TableCell>
-                  <TableCell align="right">Price</TableCell>
-                  <TableCell align="right">Line Total</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedItems.map((item, index) => (
-                  <TableRow key={`${item.product}-${index}`}>
-                    <TableCell sx={{ width: 72 }}>
-                      <ProductImageViewport
-                        src={item.image}
-                        alt={item.name}
-                        aspectRatio="1 / 1"
-                        fit="cover"
-                        containerSx={{ width: 56, minWidth: 56 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {item.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {item.selectedSize ? `Size ${item.selectedSize}` : 'Size -'}
-                        {item.selectedColor ? ` - ${item.selectedColor}` : ''}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">{item.quantity}</TableCell>
-                    <TableCell align="right">{formatINR(item.price)}</TableCell>
-                    <TableCell align="right">{formatINR(Number(item.price || 0) * Number(item.quantity || 0))}</TableCell>
+          {isMobileTable ? (
+            <Stack spacing={0.8}>
+              {paginatedItems.map((item, index) => (
+                <Card key={`${item.product}-${index}`} variant="outlined">
+                  <CardContent sx={{ p: 1 }}>
+                    <Stack spacing={0.7}>
+                      <Stack direction="row" spacing={0.8}>
+                        <ProductImageViewport
+                          src={item.image}
+                          alt={item.name}
+                          aspectRatio="1 / 1"
+                          fit="cover"
+                          containerSx={{ width: 56, minWidth: 56 }}
+                        />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {item.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.selectedSize ? `Size ${item.selectedSize}` : 'Size -'}
+                            {item.selectedColor ? ` - ${item.selectedColor}` : ''}
+                          </Typography>
+                        </Box>
+                      </Stack>
+
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="caption" color="text.secondary">Qty</Typography>
+                        <Typography variant="body2">{item.quantity}</Typography>
+                      </Stack>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="caption" color="text.secondary">Price</Typography>
+                        <Typography variant="body2">{formatINR(item.price)}</Typography>
+                      </Stack>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="caption" color="text.secondary">Line Total</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {formatINR(Number(item.price || 0) * Number(item.quantity || 0))}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Item</TableCell>
+                    <TableCell>Details</TableCell>
+                    <TableCell align="right">Qty</TableCell>
+                    <TableCell align="right">Price</TableCell>
+                    <TableCell align="right">Line Total</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
+                </TableHead>
+                <TableBody>
+                  {paginatedItems.map((item, index) => (
+                    <TableRow key={`${item.product}-${index}`}>
+                      <TableCell sx={{ width: 72 }}>
+                        <ProductImageViewport
+                          src={item.image}
+                          alt={item.name}
+                          aspectRatio="1 / 1"
+                          fit="cover"
+                          containerSx={{ width: 56, minWidth: 56 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {item.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {item.selectedSize ? `Size ${item.selectedSize}` : 'Size -'}
+                          {item.selectedColor ? ` - ${item.selectedColor}` : ''}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">{item.quantity}</TableCell>
+                      <TableCell align="right">{formatINR(item.price)}</TableCell>
+                      <TableCell align="right">{formatINR(Number(item.price || 0) * Number(item.quantity || 0))}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
 
           <AppPagination
             totalItems={totalItems}

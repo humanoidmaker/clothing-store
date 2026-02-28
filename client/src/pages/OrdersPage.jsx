@@ -2,17 +2,21 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
   CircularProgress,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  Typography
+  Typography,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import { useNavigate } from 'react-router-dom';
 import AppPagination from '../components/AppPagination';
@@ -31,6 +35,8 @@ const statusColorMap = {
 };
 
 const OrdersPage = () => {
+  const theme = useTheme();
+  const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,48 +90,95 @@ const OrdersPage = () => {
       {!loading && !error && orders.length > 0 && (
         <Card>
           <CardContent sx={{ overflowX: 'auto' }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Order ID</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Payment</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Total</TableCell>
-                  <TableCell align="right">Invoice</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+            {isMobileTable ? (
+              <Stack spacing={0.8}>
                 {paginatedItems.map((order) => (
-                  <TableRow
-                    key={order._id}
-                    hover
-                    onClick={() => navigate(`/orders/${order._id}`)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {order._id.slice(-8).toUpperCase()}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{new Date(order.createdAt).toLocaleDateString('en-IN')}</TableCell>
-                    <TableCell>{order.paymentMethod}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={order.status}
-                        size="small"
-                        color={statusColorMap[order.status] || 'default'}
-                        sx={{ textTransform: 'capitalize' }}
-                      />
-                    </TableCell>
-                    <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
-                    <TableCell align="right">
-                      <OpenInNewOutlinedIcon fontSize="small" color="action" />
-                    </TableCell>
-                  </TableRow>
+                  <Card key={order._id} variant="outlined">
+                    <CardContent sx={{ p: 1 }}>
+                      <Stack spacing={0.7}>
+                        <Stack direction="row" justifyContent="space-between" spacing={0.8}>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {order._id.slice(-8).toUpperCase()}
+                          </Typography>
+                          <Chip
+                            label={order.status}
+                            size="small"
+                            color={statusColorMap[order.status] || 'default'}
+                            sx={{ textTransform: 'capitalize' }}
+                          />
+                        </Stack>
+
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(order.createdAt).toLocaleDateString('en-IN')}
+                        </Typography>
+
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Payment</Typography>
+                          <Typography variant="body2">{order.paymentMethod}</Typography>
+                        </Stack>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Total</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(order.totalPrice)}</Typography>
+                        </Stack>
+
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<OpenInNewOutlinedIcon />}
+                          onClick={() => navigate(`/orders/${order._id}`)}
+                          fullWidth
+                        >
+                          View Invoice
+                        </Button>
+                      </Stack>
+                    </CardContent>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
+              </Stack>
+            ) : (
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Order ID</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Payment</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Total</TableCell>
+                    <TableCell align="right">Invoice</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedItems.map((order) => (
+                    <TableRow
+                      key={order._id}
+                      hover
+                      onClick={() => navigate(`/orders/${order._id}`)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {order._id.slice(-8).toUpperCase()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{new Date(order.createdAt).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell>{order.paymentMethod}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={order.status}
+                          size="small"
+                          color={statusColorMap[order.status] || 'default'}
+                          sx={{ textTransform: 'capitalize' }}
+                        />
+                      </TableCell>
+                      <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
+                      <TableCell align="right">
+                        <OpenInNewOutlinedIcon fontSize="small" color="action" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
 
             <AppPagination
               totalItems={totalItems}
