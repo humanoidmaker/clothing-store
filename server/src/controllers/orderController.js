@@ -147,6 +147,7 @@ const prepareOrderItems = async (items) => {
     let selectedSize = String(item.selectedSize || '').trim();
     let selectedColor = String(item.selectedColor || '').trim();
     let unitPrice = Number(product.price);
+    let unitPurchasePrice = Number(product.purchasePrice || 0);
     let availableStock = Number(product.countInStock);
     let variantIndex = -1;
 
@@ -175,6 +176,7 @@ const prepareOrderItems = async (items) => {
 
       const variant = product.variants[variantIndex];
       unitPrice = Number(variant.price);
+      unitPurchasePrice = Number(variant.purchasePrice ?? product.purchasePrice ?? 0);
       availableStock = Number(variant.stock || 0);
       if (!selectedColor && variant.color) {
         selectedColor = variant.color;
@@ -190,6 +192,7 @@ const prepareOrderItems = async (items) => {
       name: product.name,
       image: product.image,
       price: unitPrice,
+      purchasePrice: Number.isFinite(unitPurchasePrice) && unitPurchasePrice >= 0 ? unitPurchasePrice : 0,
       quantity,
       selectedSize,
       selectedColor
@@ -553,6 +556,60 @@ const getOrderReports = async (req, res) => {
   }
 
   const orders = await Order.find(query).select('status totalPrice createdAt paymentMethod orderItems');
+  const fallbackProductIds = new Set();
+
+  for (const order of orders) {
+    const orderItems = Array.isArray(order.orderItems) ? order.orderItems : [];
+    for (const item of orderItems) {
+      const rawPurchasePrice = Number(item.purchasePrice);
+      if ((Number.isNaN(rawPurchasePrice) || rawPurchasePrice <= 0) && item.product) {
+        fallbackProductIds.add(String(item.product));
+      }
+    }
+  }
+
+  const fallbackProducts =
+    fallbackProductIds.size > 0
+      ? await Product.find({ _id: { $in: Array.from(fallbackProductIds) } }).select('purchasePrice variants')
+      : [];
+  const fallbackProductMap = new Map(fallbackProducts.map((product) => [String(product._id), product]));
+
+  const resolveItemPurchasePrice = (item) => {
+    const storedPurchasePrice = Number(item.purchasePrice);
+    if (Number.isFinite(storedPurchasePrice) && storedPurchasePrice > 0) {
+      return storedPurchasePrice;
+    }
+    if (item.purchasePrice === 0) {
+      return 0;
+    }
+
+    const productId = String(item.product || '').trim();
+    if (!productId) {
+      return Number.isFinite(storedPurchasePrice) && storedPurchasePrice >= 0 ? storedPurchasePrice : 0;
+    }
+
+    const fallbackProduct = fallbackProductMap.get(productId);
+    if (!fallbackProduct) {
+      return Number.isFinite(storedPurchasePrice) && storedPurchasePrice >= 0 ? storedPurchasePrice : 0;
+    }
+
+    if (Array.isArray(fallbackProduct.variants) && fallbackProduct.variants.length > 0 && item.selectedSize) {
+      const variantIndex = findVariantIndex(fallbackProduct, item.selectedSize, item.selectedColor);
+      if (variantIndex >= 0) {
+        const variantPurchasePrice = Number(fallbackProduct.variants[variantIndex]?.purchasePrice);
+        if (Number.isFinite(variantPurchasePrice) && variantPurchasePrice >= 0) {
+          return variantPurchasePrice;
+        }
+      }
+    }
+
+    const fallbackPurchasePrice = Number(fallbackProduct.purchasePrice);
+    if (Number.isFinite(fallbackPurchasePrice) && fallbackPurchasePrice >= 0) {
+      return fallbackPurchasePrice;
+    }
+
+    return Number.isFinite(storedPurchasePrice) && storedPurchasePrice >= 0 ? storedPurchasePrice : 0;
+  };
 
   const statusBreakdownMap = new Map(
     ORDER_STATUSES.map((status) => [
@@ -560,7 +617,9 @@ const getOrderReports = async (req, res) => {
       {
         status,
         count: 0,
-        revenue: 0
+        revenue: 0,
+        cost: 0,
+        profitLoss: 0
       }
     ])
   );
@@ -569,9 +628,17 @@ const getOrderReports = async (req, res) => {
   const topProductsMap = new Map();
 
   let grossRevenue = 0;
+  let grossCost = 0;
+  let nonCancelledRevenue = 0;
+  let nonCancelledCost = 0;
+  let realizedRevenue = 0;
+  let realizedCost = 0;
   let profitRevenue = 0;
   let lossRevenue = 0;
   let pipelineRevenue = 0;
+  let pipelineCost = 0;
+  let cancelledRevenue = 0;
+  let cancelledCost = 0;
   let totalUnits = 0;
   let soldUnits = 0;
   let cancelledUnits = 0;
@@ -582,40 +649,10 @@ const getOrderReports = async (req, res) => {
     const orderItems = Array.isArray(order.orderItems) ? order.orderItems : [];
     const paymentMethod = normalizeQueryValue(order.paymentMethod) || 'Unknown';
     const isCancelled = orderStatus === 'cancelled';
-
-    grossRevenue += orderTotal;
-    if (PROFIT_STATUSES.includes(orderStatus)) {
-      profitRevenue += orderTotal;
-    }
-    if (PIPELINE_STATUSES.includes(orderStatus)) {
-      pipelineRevenue += orderTotal;
-    }
-    if (isCancelled) {
-      lossRevenue += orderTotal;
-    }
-
-    const statusEntry = statusBreakdownMap.get(orderStatus);
-    statusEntry.count += 1;
-    statusEntry.revenue += orderTotal;
-
-    if (!paymentBreakdownMap.has(paymentMethod)) {
-      paymentBreakdownMap.set(paymentMethod, {
-        paymentMethod,
-        count: 0,
-        revenue: 0
-      });
-    }
-    const paymentEntry = paymentBreakdownMap.get(paymentMethod);
-    paymentEntry.count += 1;
-    paymentEntry.revenue += orderTotal;
-
-    const unitCount = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    totalUnits += unitCount;
-    if (isCancelled) {
-      cancelledUnits += unitCount;
-    } else {
-      soldUnits += unitCount;
-    }
+    const isProfitStatus = PROFIT_STATUSES.includes(orderStatus);
+    const isPipelineStatus = PIPELINE_STATUSES.includes(orderStatus);
+    let orderCost = 0;
+    let unitCount = 0;
 
     for (const item of orderItems) {
       const quantity = Number(item.quantity || 0);
@@ -624,6 +661,11 @@ const getOrderReports = async (req, res) => {
       }
 
       const itemRevenue = Number(item.price || 0) * quantity;
+      const itemPurchasePrice = resolveItemPurchasePrice(item);
+      const itemCost = itemPurchasePrice * quantity;
+      orderCost += itemCost;
+      unitCount += quantity;
+
       const productId = String(item.product || '').trim();
       const productKey = productId || `name:${normalizeQueryValue(item.name).toLowerCase() || 'unknown'}`;
 
@@ -633,8 +675,11 @@ const getOrderReports = async (req, res) => {
           name: normalizeQueryValue(item.name) || 'Unnamed product',
           units: 0,
           revenue: 0,
+          cost: 0,
+          profitLoss: 0,
           cancelledUnits: 0,
-          cancelledRevenue: 0
+          cancelledRevenue: 0,
+          cancelledCost: 0
         });
       }
 
@@ -642,10 +687,68 @@ const getOrderReports = async (req, res) => {
       if (isCancelled) {
         productEntry.cancelledUnits += quantity;
         productEntry.cancelledRevenue += itemRevenue;
+        productEntry.cancelledCost += itemCost;
       } else {
         productEntry.units += quantity;
         productEntry.revenue += itemRevenue;
+        productEntry.cost += itemCost;
+        productEntry.profitLoss += itemRevenue - itemCost;
       }
+    }
+
+    grossRevenue += orderTotal;
+    grossCost += orderCost;
+
+    if (isCancelled) {
+      cancelledRevenue += orderTotal;
+      cancelledCost += orderCost;
+    } else {
+      nonCancelledRevenue += orderTotal;
+      nonCancelledCost += orderCost;
+    }
+
+    if (isProfitStatus) {
+      const orderProfitLoss = orderTotal - orderCost;
+      realizedRevenue += orderTotal;
+      realizedCost += orderCost;
+      if (orderProfitLoss >= 0) {
+        profitRevenue += orderProfitLoss;
+      } else {
+        lossRevenue += Math.abs(orderProfitLoss);
+      }
+    }
+
+    if (isPipelineStatus) {
+      pipelineRevenue += orderTotal;
+      pipelineCost += orderCost;
+    }
+
+    const statusEntry = statusBreakdownMap.get(orderStatus);
+    statusEntry.count += 1;
+    statusEntry.revenue += orderTotal;
+    statusEntry.cost += orderCost;
+    statusEntry.profitLoss += orderTotal - orderCost;
+
+    if (!paymentBreakdownMap.has(paymentMethod)) {
+      paymentBreakdownMap.set(paymentMethod, {
+        paymentMethod,
+        count: 0,
+        revenue: 0,
+        cost: 0,
+        profitLoss: 0
+      });
+    }
+    const paymentEntry = paymentBreakdownMap.get(paymentMethod);
+    paymentEntry.count += 1;
+    paymentEntry.revenue += orderTotal;
+    paymentEntry.cost += orderCost;
+    paymentEntry.profitLoss += orderTotal - orderCost;
+
+    totalUnits += unitCount;
+    if (isCancelled) {
+      cancelledUnits += unitCount;
+    } else {
+      soldUnits += unitCount;
     }
 
     const bucket = getTrendBucket(order.createdAt, normalizedInterval);
@@ -656,42 +759,57 @@ const getOrderReports = async (req, res) => {
         sortOrder: bucket.sortOrder,
         orders: 0,
         revenue: 0,
+        cost: 0,
         profit: 0,
         loss: 0,
-        pipeline: 0
+        pipelineRevenue: 0,
+        pipelineCost: 0,
+        cancelledRevenue: 0
       });
     }
 
     const trendEntry = trendMap.get(bucket.key);
     trendEntry.orders += 1;
     trendEntry.revenue += orderTotal;
-    if (PROFIT_STATUSES.includes(orderStatus)) {
-      trendEntry.profit += orderTotal;
+    trendEntry.cost += orderCost;
+    if (isProfitStatus) {
+      const orderProfitLoss = orderTotal - orderCost;
+      if (orderProfitLoss >= 0) {
+        trendEntry.profit += orderProfitLoss;
+      } else {
+        trendEntry.loss += Math.abs(orderProfitLoss);
+      }
     }
     if (isCancelled) {
-      trendEntry.loss += orderTotal;
+      trendEntry.cancelledRevenue += orderTotal;
     }
-    if (PIPELINE_STATUSES.includes(orderStatus)) {
-      trendEntry.pipeline += orderTotal;
+    if (isPipelineStatus) {
+      trendEntry.pipelineRevenue += orderTotal;
+      trendEntry.pipelineCost += orderCost;
     }
   }
 
   const totalOrders = orders.length;
   const cancelledCount = statusBreakdownMap.get('cancelled')?.count || 0;
-  const netRevenue = grossRevenue - lossRevenue;
-  const netProfitLoss = profitRevenue - lossRevenue;
+  const netRevenue = nonCancelledRevenue;
+  const netProfitLoss = realizedRevenue - realizedCost;
+  const pipelineProfitLoss = pipelineRevenue - pipelineCost;
   const averageOrderValue = totalOrders > 0 ? grossRevenue / totalOrders : 0;
   const cancellationRate = totalOrders > 0 ? (cancelledCount / totalOrders) * 100 : 0;
 
   const statusBreakdown = Array.from(statusBreakdownMap.values()).map((entry) => ({
     ...entry,
-    revenue: roundCurrency(entry.revenue)
+    revenue: roundCurrency(entry.revenue),
+    cost: roundCurrency(entry.cost),
+    profitLoss: roundCurrency(entry.profitLoss)
   }));
 
   const paymentBreakdown = Array.from(paymentBreakdownMap.values())
     .map((entry) => ({
       ...entry,
-      revenue: roundCurrency(entry.revenue)
+      revenue: roundCurrency(entry.revenue),
+      cost: roundCurrency(entry.cost),
+      profitLoss: roundCurrency(entry.profitLoss)
     }))
     .sort((a, b) => b.revenue - a.revenue);
 
@@ -702,9 +820,13 @@ const getOrderReports = async (req, res) => {
       label: entry.label,
       orders: entry.orders,
       revenue: roundCurrency(entry.revenue),
+      cost: roundCurrency(entry.cost),
       profit: roundCurrency(entry.profit),
       loss: roundCurrency(entry.loss),
-      pipeline: roundCurrency(entry.pipeline),
+      pipelineRevenue: roundCurrency(entry.pipelineRevenue),
+      pipelineCost: roundCurrency(entry.pipelineCost),
+      pipelineProfitLoss: roundCurrency(entry.pipelineRevenue - entry.pipelineCost),
+      cancelledRevenue: roundCurrency(entry.cancelledRevenue),
       netProfitLoss: roundCurrency(entry.profit - entry.loss)
     }));
 
@@ -712,13 +834,16 @@ const getOrderReports = async (req, res) => {
     .map((entry) => ({
       ...entry,
       revenue: roundCurrency(entry.revenue),
-      cancelledRevenue: roundCurrency(entry.cancelledRevenue)
+      cost: roundCurrency(entry.cost),
+      profitLoss: roundCurrency(entry.profitLoss),
+      cancelledRevenue: roundCurrency(entry.cancelledRevenue),
+      cancelledCost: roundCurrency(entry.cancelledCost)
     }))
     .sort((a, b) => {
-      if (b.revenue !== a.revenue) {
-        return b.revenue - a.revenue;
+      if (b.profitLoss !== a.profitLoss) {
+        return b.profitLoss - a.profitLoss;
       }
-      return b.units - a.units;
+      return b.revenue - a.revenue;
     })
     .slice(0, 10);
 
@@ -733,11 +858,19 @@ const getOrderReports = async (req, res) => {
     totals: {
       totalOrders,
       grossRevenue: roundCurrency(grossRevenue),
+      grossCost: roundCurrency(grossCost),
+      realizedRevenue: roundCurrency(realizedRevenue),
+      realizedCost: roundCurrency(realizedCost),
       profitRevenue: roundCurrency(profitRevenue),
       lossRevenue: roundCurrency(lossRevenue),
       netRevenue: roundCurrency(netRevenue),
       netProfitLoss: roundCurrency(netProfitLoss),
       pipelineRevenue: roundCurrency(pipelineRevenue),
+      pipelineCost: roundCurrency(pipelineCost),
+      pipelineProfitLoss: roundCurrency(pipelineProfitLoss),
+      cancelledRevenue: roundCurrency(cancelledRevenue),
+      cancelledCost: roundCurrency(cancelledCost),
+      nonCancelledCost: roundCurrency(nonCancelledCost),
       averageOrderValue: roundCurrency(averageOrderValue),
       totalUnits,
       soldUnits,

@@ -171,28 +171,34 @@ const AdminReportsPage = () => {
 
     return [
       {
-        title: 'Profit Revenue',
+        title: 'Realized Profit',
         value: formatINR(totals.profitRevenue),
-        helper: 'Paid, shipped and delivered orders',
+        helper: 'Positive margin on paid, shipped and delivered orders',
         color: 'success.main'
       },
       {
-        title: 'Loss Revenue',
+        title: 'Realized Loss',
         value: formatINR(totals.lossRevenue),
-        helper: 'Cancelled order value',
+        helper: 'Negative margin on paid, shipped and delivered orders',
         color: 'error.main'
       },
       {
         title: 'Net P/L',
         value: formatINR(totals.netProfitLoss),
-        helper: 'Profit revenue minus loss revenue',
+        helper: 'Realized revenue minus realized cost',
         color: totals.netProfitLoss >= 0 ? 'success.main' : 'error.main'
       },
       {
         title: 'Gross Revenue',
         value: formatINR(totals.grossRevenue),
-        helper: 'All order values before cancellations',
+        helper: `All order values (cancelled: ${formatINR(totals.cancelledRevenue)})`,
         color: 'primary.main'
+      },
+      {
+        title: 'Gross Cost',
+        value: formatINR(totals.grossCost),
+        helper: `Purchase cost on all orders (cancelled: ${formatINR(totals.cancelledCost)})`,
+        color: 'text.primary'
       },
       {
         title: 'Total Orders',
@@ -207,9 +213,9 @@ const AdminReportsPage = () => {
         color: 'text.primary'
       },
       {
-        title: 'Pipeline Revenue',
-        value: formatINR(totals.pipelineRevenue),
-        helper: 'Pending + processing',
+        title: 'Pipeline P/L',
+        value: formatINR(totals.pipelineProfitLoss),
+        helper: `${formatINR(totals.pipelineRevenue)} revenue vs ${formatINR(totals.pipelineCost)} cost`,
         color: 'warning.main'
       },
       {
@@ -223,7 +229,7 @@ const AdminReportsPage = () => {
 
   const maxTrendValue = useMemo(() => {
     return trendSeries.reduce((maxValue, entry) => {
-      return Math.max(maxValue, Number(entry.profit || 0), Number(entry.loss || 0), Number(entry.revenue || 0));
+      return Math.max(maxValue, Number(entry.profit || 0), Number(entry.loss || 0));
     }, 1);
   }, [trendSeries]);
 
@@ -426,7 +432,7 @@ const AdminReportsPage = () => {
               <CardContent sx={{ p: 1 }}>
                 <Typography variant="subtitle2">Profit vs Loss Trend</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Green bars represent profit revenue and red bars represent loss revenue.
+                  Green bars represent positive margin and red bars represent negative margin.
                 </Typography>
                 <Divider sx={{ my: 0.8 }} />
 
@@ -503,7 +509,7 @@ const AdminReportsPage = () => {
                             sx={{ height: 6, borderRadius: 999, mt: 0.3, mb: 0.2 }}
                           />
                           <Typography variant="caption" color="text.secondary">
-                            {formatINR(entry.revenue)}
+                            Revenue {formatINR(entry.revenue)} | P/L {formatINR(entry.profitLoss)}
                           </Typography>
                         </Box>
                       );
@@ -536,7 +542,7 @@ const AdminReportsPage = () => {
                               sx={{ height: 6, borderRadius: 999, mt: 0.3, mb: 0.2 }}
                             />
                             <Typography variant="caption" color="text.secondary">
-                              {formatINR(entry.revenue)} ({formatPercent(percent)})
+                              {formatINR(entry.revenue)} ({formatPercent(percent)}) | P/L {formatINR(entry.profitLoss)}
                             </Typography>
                           </Box>
                         );
@@ -552,7 +558,7 @@ const AdminReportsPage = () => {
             <CardContent sx={{ p: 1 }}>
               <Typography variant="subtitle2">Top Product Performance</Typography>
               <Typography variant="caption" color="text.secondary">
-                Revenue excludes cancelled orders and loss columns show cancelled impact by product.
+                Profit and loss are calculated from selling price minus purchase price per unit.
               </Typography>
               <Divider sx={{ my: 0.8 }} />
 
@@ -566,9 +572,12 @@ const AdminReportsPage = () => {
                         <TableCell>Product</TableCell>
                         <TableCell align="right">Units</TableCell>
                         <TableCell align="right">Revenue</TableCell>
+                        <TableCell align="right">Cost</TableCell>
+                        <TableCell align="right">Profit/Loss</TableCell>
                         <TableCell>Revenue Share</TableCell>
                         <TableCell align="right">Cancelled Units</TableCell>
                         <TableCell align="right">Cancelled Value</TableCell>
+                        <TableCell align="right">Cancelled Cost</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -581,6 +590,8 @@ const AdminReportsPage = () => {
                             </TableCell>
                             <TableCell align="right">{formatNumber(product.units)}</TableCell>
                             <TableCell align="right">{formatINR(product.revenue)}</TableCell>
+                            <TableCell align="right">{formatINR(product.cost)}</TableCell>
+                            <TableCell align="right">{formatINR(product.profitLoss)}</TableCell>
                             <TableCell sx={{ minWidth: 170 }}>
                               <LinearProgress
                                 variant="determinate"
@@ -594,6 +605,7 @@ const AdminReportsPage = () => {
                             </TableCell>
                             <TableCell align="right">{formatNumber(product.cancelledUnits)}</TableCell>
                             <TableCell align="right">{formatINR(product.cancelledRevenue)}</TableCell>
+                            <TableCell align="right">{formatINR(product.cancelledCost)}</TableCell>
                           </TableRow>
                         );
                       })}

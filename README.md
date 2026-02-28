@@ -77,6 +77,6 @@ This project is now fashion-specific (not general-purpose ecommerce):
 - Prices are stored/displayed in INR.
 - Seeded sample catalog includes Nike shoes with size-wise pricing.
 - Admin dashboard can create, edit, delete products and update order statuses (`pending`, `processing`, `paid`, `shipped`, `delivered`, `cancelled`).
-- Admin dashboard includes business reports with filterable profit/loss metrics, status/payment breakdowns, trend charts, and top product reports.
-- Admin can create variant pricing with `variants` JSON (`size`, `color`, `price`, `stock`).
+- Admin dashboard includes business reports with filterable profit/loss metrics based on product and variant purchase price (COGS), plus status/payment breakdowns, trend charts, and top product reports.
+- Admin can create variant pricing with `variants` JSON (`size`, `color`, `price`, `purchasePrice`, `stock`).
 - If you previously seeded older products, run `npm run seed` again to load the new clothing dataset.

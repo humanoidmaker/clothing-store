@@ -63,10 +63,19 @@ const normalizeVariants = (value) => {
       const size = String(variant?.size || '').trim();
       const color = String(variant?.color || '').trim();
       const price = Number(variant?.price);
+      const purchasePrice = Number(variant?.purchasePrice);
       const stock = Number(variant?.stock);
       const images = normalizeImageList(variant?.images);
 
-      if (!size || Number.isNaN(price) || price < 0 || Number.isNaN(stock) || stock < 0) {
+      if (
+        !size ||
+        Number.isNaN(price) ||
+        price < 0 ||
+        Number.isNaN(purchasePrice) ||
+        purchasePrice < 0 ||
+        Number.isNaN(stock) ||
+        stock < 0
+      ) {
         return null;
       }
 
@@ -74,6 +83,7 @@ const normalizeVariants = (value) => {
         size,
         color,
         price,
+        purchasePrice,
         stock,
         images
       };
@@ -90,12 +100,17 @@ const getVariantMeta = (variants) => {
   const colors = [...new Set(variants.map((variant) => variant.color).filter(Boolean))];
   const countInStock = variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
   const minPrice = variants.reduce((min, variant) => (variant.price < min ? variant.price : min), variants[0].price);
+  const minPurchasePrice = variants.reduce(
+    (min, variant) => (variant.purchasePrice < min ? variant.purchasePrice : min),
+    variants[0].purchasePrice
+  );
 
   return {
     sizes,
     colors,
     countInStock,
-    minPrice
+    minPrice,
+    minPurchasePrice
   };
 };
 
@@ -302,6 +317,7 @@ const createProduct = async (req, res) => {
     material,
     fit,
     price,
+    purchasePrice,
     countInStock
   } = req.body;
 
@@ -309,17 +325,21 @@ const createProduct = async (req, res) => {
   const variantMeta = getVariantMeta(normalizedVariants);
   const hasVariants = Boolean(variantMeta);
 
-  if (!name || !description || !category || (!hasVariants && price === undefined)) {
-    return res.status(400).json({ message: 'Name, description, category and price are required' });
+  if (!name || !description || !category || (!hasVariants && (price === undefined || purchasePrice === undefined))) {
+    return res.status(400).json({ message: 'Name, description, category, price and purchase price are required' });
   }
 
   const normalizedSizes = hasVariants ? variantMeta.sizes : normalizeList(sizes);
   const normalizedColors = hasVariants ? variantMeta.colors : normalizeList(colors);
   const resolvedPrice = hasVariants ? variantMeta.minPrice : Number(price);
+  const resolvedPurchasePrice = hasVariants ? variantMeta.minPurchasePrice : Number(purchasePrice);
   const resolvedStock = hasVariants ? variantMeta.countInStock : Number(countInStock ?? 0);
 
   if (!hasVariants && (Number.isNaN(resolvedPrice) || resolvedPrice < 0)) {
     return res.status(400).json({ message: 'Price must be a valid positive number' });
+  }
+  if (!hasVariants && (Number.isNaN(resolvedPurchasePrice) || resolvedPurchasePrice < 0)) {
+    return res.status(400).json({ message: 'Purchase price must be a valid positive number' });
   }
 
   const { primaryImage, finalImages } = resolvePrimaryImage(images, normalizedVariants, image);
@@ -338,6 +358,7 @@ const createProduct = async (req, res) => {
     material,
     fit,
     price: resolvedPrice,
+    purchasePrice: resolvedPurchasePrice,
     countInStock: resolvedStock
   });
 
@@ -360,6 +381,7 @@ const updateProduct = async (req, res) => {
     'material',
     'fit',
     'price',
+    'purchasePrice',
     'countInStock'
   ];
   fields.forEach((field) => {
@@ -397,6 +419,7 @@ const updateProduct = async (req, res) => {
       product.sizes = variantMeta.sizes;
       product.colors = variantMeta.colors;
       product.price = variantMeta.minPrice;
+      product.purchasePrice = variantMeta.minPurchasePrice;
       product.countInStock = variantMeta.countInStock;
     }
   }

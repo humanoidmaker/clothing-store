@@ -76,6 +76,7 @@ const createInitialForm = (storeName = 'Astra Attire') => ({
   material: '',
   fit: 'Regular',
   price: '',
+  purchasePrice: '',
   countInStock: ''
 });
 
@@ -84,6 +85,7 @@ const createEmptyVariant = () => ({
   size: '',
   color: '',
   price: '',
+  purchasePrice: '',
   stock: '',
   images: []
 });
@@ -99,6 +101,7 @@ const mapProductToForm = (product) => ({
   material: product.material || '',
   fit: product.fit || '',
   price: product.price ?? '',
+  purchasePrice: product.purchasePrice ?? '',
   countInStock: product.countInStock ?? ''
 });
 
@@ -121,6 +124,7 @@ const parseProductVariants = (product) => {
       size: String(variant.size || ''),
       color: String(variant.color || ''),
       price: variant.price ?? '',
+      purchasePrice: variant.purchasePrice ?? '',
       stock: variant.stock ?? '',
       images: Array.isArray(variant.images) ? variant.images.filter(Boolean) : []
     }));
@@ -493,15 +497,27 @@ const AdminProductsPage = () => {
           size: String(row.size || '').trim(),
           color: String(row.color || '').trim(),
           price: row.price === '' ? '' : Number(row.price),
+          purchasePrice: row.purchasePrice === '' ? '' : Number(row.purchasePrice),
           stock: row.stock === '' ? '' : Number(row.stock),
           images: Array.isArray(row.images) ? row.images.filter(Boolean) : []
         }))
-        .filter((row) => row.size || row.color || row.price !== '' || row.stock !== '' || row.images.length > 0);
+        .filter(
+          (row) =>
+            row.size ||
+            row.color ||
+            row.price !== '' ||
+            row.purchasePrice !== '' ||
+            row.stock !== '' ||
+            row.images.length > 0
+        );
 
       for (const variant of normalizedVariants) {
         if (!variant.size) throw new Error('Each variant must include size');
         if (variant.price === '' || Number.isNaN(variant.price) || variant.price < 0) {
           throw new Error('Each variant must include a valid price');
+        }
+        if (variant.purchasePrice === '' || Number.isNaN(variant.purchasePrice) || variant.purchasePrice < 0) {
+          throw new Error('Each variant must include a valid purchase price');
         }
         if (variant.stock === '' || Number.isNaN(variant.stock) || variant.stock < 0) {
           throw new Error('Each variant must include a valid stock');
@@ -525,12 +541,20 @@ const AdminProductsPage = () => {
         if (form.price === '' || Number.isNaN(Number(form.price)) || Number(form.price) < 0) {
           throw new Error('Base price is required when no variants are added');
         }
+        if (
+          form.purchasePrice === '' ||
+          Number.isNaN(Number(form.purchasePrice)) ||
+          Number(form.purchasePrice) < 0
+        ) {
+          throw new Error('Base purchase price is required when no variants are added');
+        }
         if (form.countInStock === '' || Number.isNaN(Number(form.countInStock)) || Number(form.countInStock) < 0) {
           throw new Error('Base stock is required when no variants are added');
         }
       }
 
       if (form.price !== '') payload.price = Number(form.price);
+      if (form.purchasePrice !== '') payload.purchasePrice = Number(form.purchasePrice);
       if (form.countInStock !== '') payload.countInStock = Number(form.countInStock);
 
       if (editingProductId) {
@@ -647,6 +671,10 @@ const AdminProductsPage = () => {
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(product.price)}</Typography>
                           </Stack>
                           <Stack direction="row" justifyContent="space-between">
+                            <Typography variant="caption" color="text.secondary">Purchase</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(product.purchasePrice)}</Typography>
+                          </Stack>
+                          <Stack direction="row" justifyContent="space-between">
                             <Typography variant="caption" color="text.secondary">Stock</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{product.countInStock}</Typography>
                           </Stack>
@@ -690,6 +718,7 @@ const AdminProductsPage = () => {
                       <TableCell>Category</TableCell>
                       <TableCell>Gender</TableCell>
                       <TableCell align="right">Price</TableCell>
+                      <TableCell align="right">Purchase Price</TableCell>
                       <TableCell align="right">Stock</TableCell>
                       <TableCell align="right">Actions</TableCell>
                     </TableRow>
@@ -701,6 +730,7 @@ const AdminProductsPage = () => {
                         <TableCell>{product.category}</TableCell>
                         <TableCell>{product.gender}</TableCell>
                         <TableCell align="right">{formatINR(product.price)}</TableCell>
+                        <TableCell align="right">{formatINR(product.purchasePrice)}</TableCell>
                         <TableCell align="right">{product.countInStock}</TableCell>
                         <TableCell align="right">
                           <Stack direction="row" spacing={0.6} justifyContent="flex-end">
@@ -821,6 +851,17 @@ const AdminProductsPage = () => {
                 <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 4' } }}>
                   <TextField
                     fullWidth
+                    label="Base Purchase Price (used if no variants)"
+                    name="purchasePrice"
+                    type="number"
+                    min="0"
+                    value={form.purchasePrice}
+                    onChange={onFieldChange}
+                  />
+                </Box>
+                <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1', lg: 'span 4' } }}>
+                  <TextField
+                    fullWidth
                     label="Base Stock (used if no variants)"
                     name="countInStock"
                     type="number"
@@ -904,7 +945,7 @@ const AdminProductsPage = () => {
                               onChange={(event) => onVariantChange(variant.id, 'size', event.target.value)}
                             />
                           </Box>
-                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 3' } }}>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
                             <TextField
                               fullWidth
                               label="Color"
@@ -927,12 +968,22 @@ const AdminProductsPage = () => {
                               fullWidth
                               type="number"
                               min="0"
+                              label="Purchase Price"
+                              value={variant.purchasePrice}
+                              onChange={(event) => onVariantChange(variant.id, 'purchasePrice', event.target.value)}
+                            />
+                          </Box>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
+                            <TextField
+                              fullWidth
+                              type="number"
+                              min="0"
                               label="Stock"
                               value={variant.stock}
                               onChange={(event) => onVariantChange(variant.id, 'stock', event.target.value)}
                             />
                           </Box>
-                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 2' } }}>
+                          <Box sx={{ minWidth: 0, gridColumn: { xs: 'span 1', sm: 'span 1' } }}>
                             <IconButton
                               onClick={() => removeVariantRow(variant.id)}
                               color="error"

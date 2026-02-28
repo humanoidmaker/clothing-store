@@ -17,6 +17,11 @@ const variantSchema = new mongoose.Schema(
       required: true,
       min: 0
     },
+    purchasePrice: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
     stock: {
       type: Number,
       required: true,
@@ -89,6 +94,11 @@ const productSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0
+    },
+    purchasePrice: {
+      type: Number,
+      min: 0,
+      default: 0
     },
     countInStock: {
       type: Number,

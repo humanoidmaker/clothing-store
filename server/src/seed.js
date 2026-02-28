@@ -172,6 +172,26 @@ const sampleProducts = [
   }
 ];
 
+const estimatePurchasePrice = (sellPrice) => Math.max(0, Math.round(Number(sellPrice || 0) * 0.58));
+
+const withPurchasePricing = sampleProducts.map((product) => {
+  const variants = Array.isArray(product.variants)
+    ? product.variants.map((variant) => ({
+      ...variant,
+      purchasePrice: Number(variant.purchasePrice ?? estimatePurchasePrice(variant.price))
+    }))
+    : [];
+
+  return {
+    ...product,
+    variants,
+    purchasePrice: Number(
+      product.purchasePrice ??
+      (variants.length > 0 ? Math.min(...variants.map((variant) => variant.purchasePrice)) : estimatePurchasePrice(product.price))
+    )
+  };
+});
+
 const seed = async () => {
   try {
     await connectDB();
@@ -186,7 +206,7 @@ const seed = async () => {
       isAdmin: true
     });
 
-    await Product.insertMany(sampleProducts);
+    await Product.insertMany(withPurchasePricing);
 
     console.log('Database seeded successfully');
     process.exit(0);

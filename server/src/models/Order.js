@@ -18,6 +18,11 @@ const orderItemSchema = new mongoose.Schema(
       type: Number,
       required: true
     },
+    purchasePrice: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
     quantity: {
       type: Number,
       required: true,
