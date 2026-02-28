@@ -380,6 +380,16 @@ const getMyOrders = async (req, res) => {
   return res.json(orders);
 };
 
+const getMyOrderById = async (req, res) => {
+  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+
+  if (!order) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  return res.json(order);
+};
+
 const getAllOrders = async (req, res) => {
   const orders = await Order.find({})
     .populate('user', 'name email')
@@ -422,6 +432,7 @@ module.exports = {
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
   getMyOrders,
+  getMyOrderById,
   getAllOrders,
   updateOrderStatus
 };

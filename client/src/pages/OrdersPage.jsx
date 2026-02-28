@@ -13,6 +13,8 @@ import {
   TableRow,
   Typography
 } from '@mui/material';
+import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import api from '../api';
 import { formatINR } from '../utils/currency';
@@ -27,6 +29,7 @@ const statusColorMap = {
 };
 
 const OrdersPage = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -54,7 +57,7 @@ const OrdersPage = () => {
       <PageHeader
         eyebrow="Orders"
         title="My Orders"
-        subtitle="Track payments and status updates for all your purchases."
+        subtitle="Track payments and status updates. Click an order to open full invoice."
       />
 
       {loading && (
@@ -78,11 +81,17 @@ const OrdersPage = () => {
                   <TableCell>Payment</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell align="right">Total</TableCell>
+                  <TableCell align="right">Invoice</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {orders.map((order) => (
-                  <TableRow key={order._id} hover>
+                  <TableRow
+                    key={order._id}
+                    hover
+                    onClick={() => navigate(`/orders/${order._id}`)}
+                    sx={{ cursor: 'pointer' }}
+                  >
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {order._id.slice(-8).toUpperCase()}
@@ -99,6 +108,9 @@ const OrdersPage = () => {
                       />
                     </TableCell>
                     <TableCell align="right">{formatINR(order.totalPrice)}</TableCell>
+                    <TableCell align="right">
+                      <OpenInNewOutlinedIcon fontSize="small" color="action" />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

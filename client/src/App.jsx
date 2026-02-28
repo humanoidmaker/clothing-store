@@ -13,6 +13,7 @@ import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import OrderInvoicePage from './pages/OrderInvoicePage';
 import OrdersPage from './pages/OrdersPage';
 import ProductPage from './pages/ProductPage';
 import RegisterPage from './pages/RegisterPage';
@@ -59,6 +60,14 @@ const App = () => {
                         element={
                           <ProtectedRoute>
                             <OrdersPage />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/orders/:id"
+                        element={
+                          <ProtectedRoute>
+                            <OrderInvoicePage />
                           </ProtectedRoute>
                         }
                       />
