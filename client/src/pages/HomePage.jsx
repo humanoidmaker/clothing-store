@@ -13,7 +13,6 @@ import {
   Select,
   Slider,
   Stack,
-  TextField,
   Typography
 } from '@mui/material';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
@@ -253,14 +252,6 @@ const HomePage = () => {
               </Stack>
 
               <Stack spacing={1.1}>
-                <TextField
-                  label="Search"
-                  placeholder="shirt, denim"
-                  value={filters.search}
-                  onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-                  size="small"
-                />
-
                 <FormControl size="small">
                   <InputLabel>Category</InputLabel>
                   <Select

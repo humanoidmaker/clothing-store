@@ -20,6 +20,7 @@ import {
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
+import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import { Link as RouterLink, NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -63,10 +64,8 @@ const Navbar = () => {
     setSearchText(q);
   }, [location.pathname, location.search]);
 
-  const onSearchSubmit = (event) => {
-    event.preventDefault();
-
-    const q = searchText.trim();
+  const navigateToSearch = (query) => {
+    const q = String(query || '').trim();
     const params = new URLSearchParams();
     if (q) params.set('q', q);
 
@@ -74,6 +73,16 @@ const Navbar = () => {
       pathname: '/',
       search: params.toString() ? `?${params.toString()}` : ''
     });
+  };
+
+  const onSearchSubmit = (event) => {
+    event.preventDefault();
+    navigateToSearch(searchText);
+  };
+
+  const onClearSearch = () => {
+    setSearchText('');
+    navigateToSearch('');
   };
 
   return (
@@ -110,7 +119,11 @@ const Navbar = () => {
                 </Box>
               )}
 
-              <Box component="form" onSubmit={onSearchSubmit} sx={{ ml: 'auto', width: 320 }}>
+              <Box
+                component="form"
+                onSubmit={onSearchSubmit}
+                sx={{ ml: 'auto', width: 420, display: 'flex', gap: 0.6, alignItems: 'center' }}
+              >
                 <TextField
                   fullWidth
                   size="small"
@@ -128,9 +141,24 @@ const Navbar = () => {
                       <InputAdornment position="start">
                         <SearchOutlinedIcon fontSize="small" />
                       </InputAdornment>
-                    )
+                    ),
+                    endAdornment: searchText ? (
+                      <InputAdornment position="end">
+                        <IconButton
+                          type="button"
+                          size="small"
+                          aria-label="Clear search"
+                          onClick={onClearSearch}
+                        >
+                          <CloseOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null
                   }}
                 />
+                <Button type="submit" variant="contained" color="secondary" sx={{ flexShrink: 0 }}>
+                  Search
+                </Button>
               </Box>
             </Stack>
 
@@ -181,7 +209,7 @@ const Navbar = () => {
           </Toolbar>
 
           <Box sx={{ display: { xs: 'block', md: 'none' }, pb: 0.8 }}>
-            <Box component="form" onSubmit={onSearchSubmit}>
+            <Box component="form" onSubmit={onSearchSubmit} sx={{ display: 'flex', gap: 0.6, alignItems: 'center' }}>
               <TextField
                 fullWidth
                 size="small"
@@ -199,9 +227,24 @@ const Navbar = () => {
                     <InputAdornment position="start">
                       <SearchOutlinedIcon fontSize="small" />
                     </InputAdornment>
-                  )
+                  ),
+                  endAdornment: searchText ? (
+                    <InputAdornment position="end">
+                      <IconButton
+                        type="button"
+                        size="small"
+                        aria-label="Clear search"
+                        onClick={onClearSearch}
+                      >
+                        <CloseOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null
                 }}
               />
+              <Button type="submit" variant="contained" color="secondary" sx={{ flexShrink: 0 }}>
+                Search
+              </Button>
             </Box>
           </Box>
         </Container>
