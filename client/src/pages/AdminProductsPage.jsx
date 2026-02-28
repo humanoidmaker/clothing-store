@@ -576,28 +576,33 @@ const AdminProductsPage = () => {
                   </Typography>
                 </Stack>
                 {productImages.length > 0 && (
-                  <Grid container spacing={0.8}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gap: 0.8,
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 72px))',
+                      justifyContent: 'start'
+                    }}
+                  >
                     {productImages.map((image, imageIndex) => (
-                      <Grid item xs={6} sm={4} md={3} key={`product-image-${imageIndex}`}>
-                        <Box sx={{ position: 'relative' }}>
-                          <ProductImageViewport
-                            src={image}
-                            alt={`Product ${imageIndex + 1}`}
-                            aspectRatio="1 / 1"
-                            fit="cover"
-                          />
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => removeProductImage(imageIndex)}
-                            sx={{ position: 'absolute', top: 2, right: 2, bgcolor: 'background.paper' }}
-                          >
-                            <CloseOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </Grid>
+                      <Box key={`product-image-${imageIndex}`} sx={{ position: 'relative', minWidth: 0 }}>
+                        <ProductImageViewport
+                          src={image}
+                          alt={`Product ${imageIndex + 1}`}
+                          aspectRatio="1 / 1"
+                          fit="cover"
+                        />
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => removeProductImage(imageIndex)}
+                          sx={{ position: 'absolute', top: 2, right: 2, bgcolor: 'background.paper' }}
+                        >
+                          <CloseOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
                     ))}
-                  </Grid>
+                  </Box>
                 )}
               </Stack>
 
@@ -674,28 +679,33 @@ const AdminProductsPage = () => {
                             />
                           </Button>
                           {variant.images.length > 0 && (
-                            <Grid container spacing={0.8}>
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gap: 0.8,
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 72px))',
+                                justifyContent: 'start'
+                              }}
+                            >
                               {variant.images.map((image, imageIndex) => (
-                                <Grid item xs={6} sm={4} md={3} key={`variant-${index}-image-${imageIndex}`}>
-                                  <Box sx={{ position: 'relative' }}>
-                                    <ProductImageViewport
-                                      src={image}
-                                      alt={`Variant ${index + 1} ${imageIndex + 1}`}
-                                      aspectRatio="1 / 1"
-                                      fit="cover"
-                                    />
-                                    <IconButton
-                                      size="small"
-                                      color="error"
-                                      onClick={() => removeVariantImage(index, imageIndex)}
-                                      sx={{ position: 'absolute', top: 2, right: 2, bgcolor: 'background.paper' }}
-                                    >
-                                      <CloseOutlinedIcon fontSize="small" />
-                                    </IconButton>
-                                  </Box>
-                                </Grid>
+                                <Box key={`variant-${index}-image-${imageIndex}`} sx={{ position: 'relative', minWidth: 0 }}>
+                                  <ProductImageViewport
+                                    src={image}
+                                    alt={`Variant ${index + 1} ${imageIndex + 1}`}
+                                    aspectRatio="1 / 1"
+                                    fit="cover"
+                                  />
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => removeVariantImage(index, imageIndex)}
+                                    sx={{ position: 'absolute', top: 2, right: 2, bgcolor: 'background.paper' }}
+                                  >
+                                    <CloseOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                                </Box>
                               ))}
-                            </Grid>
+                            </Box>
                           )}
                         </Stack>
                       </Stack>
