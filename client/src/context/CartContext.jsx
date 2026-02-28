@@ -1,6 +1,7 @@
 ﻿import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 const CartContext = createContext(null);
+const fallbackImage = 'https://placehold.co/600x400?text=Product';
 
 const parseCart = () => {
   const raw = localStorage.getItem('cart');
@@ -30,6 +31,17 @@ const findVariant = (product, selectedSize, selectedColor) => {
   return sizeMatched.find((variant) => (variant.color || '') === selectedColor) || null;
 };
 
+const getFirstImage = (images) => {
+  if (!Array.isArray(images)) return '';
+  return images.find(Boolean) || '';
+};
+
+const resolveCartImage = (product, selectedVariant) => {
+  const variantImage = getFirstImage(selectedVariant?.images);
+  const productImage = getFirstImage(product?.images);
+  return variantImage || productImage || product?.image || fallbackImage;
+};
+
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState(parseCart);
 
@@ -50,6 +62,7 @@ export const CartProvider = ({ children }) => {
     const selectedVariant = findVariant(product, selectedSize, selectedColor);
     const resolvedPrice = Number(unitPrice ?? selectedVariant?.price ?? product.price);
     const resolvedStock = Number(stockLimit ?? selectedVariant?.stock ?? product.countInStock ?? 999);
+    const resolvedImage = resolveCartImage(product, selectedVariant);
 
     setItems((current) => {
       const existing = current.find((item) => item.cartKey === cartKey);
@@ -60,6 +73,7 @@ export const CartProvider = ({ children }) => {
             ? {
                 ...item,
                 quantity: Math.min(item.quantity + safeQty, resolvedStock),
+                image: resolvedImage,
                 price: resolvedPrice,
                 countInStock: resolvedStock
               }
@@ -73,7 +87,7 @@ export const CartProvider = ({ children }) => {
           cartKey,
           productId: product._id,
           name: product.name,
-          image: product.image,
+          image: resolvedImage,
           price: resolvedPrice,
           countInStock: resolvedStock,
           selectedSize,

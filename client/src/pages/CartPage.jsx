@@ -14,6 +14,7 @@ import {
   Typography
 } from '@mui/material';
 import PageHeader from '../components/PageHeader';
+import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -57,11 +58,12 @@ const CartPage = () => {
               <Card key={item.cartKey}>
                 <CardContent sx={{ p: 1.1 }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ sm: 'center' }}>
-                    <Box
-                      component="img"
+                    <ProductImageViewport
                       src={item.image}
                       alt={item.name}
-                      sx={{ width: 70, height: 84, objectFit: 'cover' }}
+                      aspectRatio="1 / 1"
+                      fit="cover"
+                      containerSx={{ width: 70, minWidth: 70 }}
                     />
 
                     <Box sx={{ flex: 1 }}>

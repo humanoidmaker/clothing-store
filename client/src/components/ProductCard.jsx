@@ -4,7 +4,6 @@ import {
   CardActionArea,
   CardActions,
   CardContent,
-  CardMedia,
   Chip,
   Stack,
   Typography
@@ -16,6 +15,9 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { formatINR } from '../utils/currency';
+import ProductImageViewport from './ProductImageViewport';
+
+const placeholderImage = 'https://placehold.co/600x400?text=Product';
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
@@ -35,6 +37,15 @@ const ProductCard = ({ product }) => {
   const defaultPrice = defaultVariant?.price ?? product.price;
   const defaultStock = defaultVariant?.stock ?? product.countInStock;
   const wished = isInWishlist(product._id);
+  const descriptionPreview = String(product.description || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const firstProductImage = Array.isArray(product.images) ? product.images.find(Boolean) : '';
+  const firstVariantImage = hasVariants
+    ? product.variants.find((variant) => Array.isArray(variant.images) && variant.images.length > 0)?.images?.[0] || ''
+    : '';
+  const displayImage = firstProductImage || product.image || firstVariantImage || placeholderImage;
 
   return (
     <Card
@@ -57,7 +68,13 @@ const ProductCard = ({ product }) => {
         to={`/products/${product._id}`}
         sx={{ display: 'block', flexGrow: 1, alignItems: 'stretch' }}
       >
-        <CardMedia component="img" height="190" image={product.image} alt={product.name} />
+        <ProductImageViewport
+          src={displayImage}
+          alt={product.name}
+          aspectRatio="1 / 1"
+          fit="cover"
+          containerSx={{ border: 'none', borderBottom: '1px solid', borderBottomColor: 'divider' }}
+        />
 
         <CardContent sx={{ flexGrow: 1, p: 1.2 }}>
           <Stack direction="row" spacing={0.6} sx={{ mb: 0.8, flexWrap: 'wrap' }}>
@@ -69,7 +86,7 @@ const ProductCard = ({ product }) => {
             {product.name}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ minHeight: 32 }}>
-            {product.description}
+            {descriptionPreview}
           </Typography>
 
           <Stack direction="row" spacing={0.6} sx={{ mt: 0.8, mb: 0.8, flexWrap: 'wrap' }}>
@@ -90,7 +107,7 @@ const ProductCard = ({ product }) => {
           color="secondary"
           fullWidth
           startIcon={wished ? <FavoriteOutlinedIcon /> : <FavoriteBorderOutlinedIcon />}
-          onClick={() => toggleWishlist(product)}
+          onClick={() => toggleWishlist(product, { selectedSize: defaultSize, selectedColor: defaultColor })}
         >
           {wished ? 'Wishlisted' : 'Wishlist'}
         </Button>

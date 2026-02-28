@@ -11,6 +11,7 @@ import {
   Typography
 } from '@mui/material';
 import PageHeader from '../components/PageHeader';
+import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -57,11 +58,12 @@ const WishlistPage = () => {
             <Card key={item.productId}>
               <CardContent sx={{ p: 1.1 }}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ sm: 'center' }}>
-                  <Box
-                    component="img"
+                  <ProductImageViewport
                     src={item.image}
                     alt={item.name}
-                    sx={{ width: 70, height: 84, objectFit: 'cover' }}
+                    aspectRatio="1 / 1"
+                    fit="cover"
+                    containerSx={{ width: 70, minWidth: 70 }}
                   />
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -69,7 +71,7 @@ const WishlistPage = () => {
                       {item.name}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-                      {item.brand || 'Fashion'} · {formatINR(item.price)}
+                      {item.brand || 'Fashion'} - {formatINR(item.price)}
                     </Typography>
 
                     <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap sx={{ mt: 0.6 }}>

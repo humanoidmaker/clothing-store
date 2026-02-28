@@ -23,10 +23,11 @@ import api from '../api';
 import ProductCard from '../components/ProductCard';
 import { formatINR } from '../utils/currency';
 
-const categoryOptions = ['All', 'T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
-const genderOptions = ['All', 'Men', 'Women', 'Unisex'];
-const sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '26', '28', '30', '32', '34', '36', '38', '6', '7', '8', '9', '10', '11'];
-const colorOptions = ['Black', 'White', 'Navy', 'Grey', 'Beige', 'Olive', 'Maroon', 'Blue', 'Sky Blue', 'Mint', 'Coral', 'Off White', 'Red', 'Green'];
+const defaultPriceRange = [500, 8000];
+const fallbackCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
+const fallbackGenderOptions = ['Men', 'Women', 'Unisex'];
+const fallbackSizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '26', '28', '30', '32', '34', '36', '38', '6', '7', '8', '9', '10', '11'];
+const fallbackColorOptions = ['Black', 'White', 'Navy', 'Grey', 'Beige', 'Olive', 'Maroon', 'Blue', 'Sky Blue', 'Mint', 'Coral', 'Off White', 'Red', 'Green'];
 const sortOptions = [
   { value: 'newest', label: 'Newest First' },
   { value: 'price_asc', label: 'Price: Low to High' },
@@ -34,22 +35,77 @@ const sortOptions = [
   { value: 'rating', label: 'Top Rated' }
 ];
 
-const initialFilters = {
+const withAll = (values) => ['All', ...values.filter(Boolean)];
+
+const createInitialFilters = (priceRange = defaultPriceRange) => ({
   search: '',
   category: 'All',
   gender: 'All',
+  brand: 'All',
+  material: 'All',
+  fit: 'All',
   size: '',
   color: '',
-  priceRange: [500, 8000],
+  availability: 'all',
+  priceRange: [...priceRange],
   sort: 'newest'
+});
+
+const fallbackFilterOptions = {
+  categories: withAll(fallbackCategoryOptions),
+  genders: withAll(fallbackGenderOptions),
+  sizes: fallbackSizeOptions,
+  colors: fallbackColorOptions,
+  brands: ['All'],
+  materials: ['All'],
+  fits: ['All']
 };
 
 const HomePage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingFilterOptions, setLoadingFilterOptions] = useState(true);
   const [error, setError] = useState('');
-  const [filters, setFilters] = useState(initialFilters);
-  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const [filters, setFilters] = useState(() => createInitialFilters(defaultPriceRange));
+  const [appliedFilters, setAppliedFilters] = useState(() => createInitialFilters(defaultPriceRange));
+  const [filterOptions, setFilterOptions] = useState(fallbackFilterOptions);
+  const [priceBounds, setPriceBounds] = useState({
+    min: defaultPriceRange[0],
+    max: defaultPriceRange[1]
+  });
+
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      setLoadingFilterOptions(true);
+
+      try {
+        const { data } = await api.get('/products/filters');
+        const nextMin = Math.max(0, Math.floor(Number(data.minPrice ?? 0)));
+        const normalizedMax = Math.ceil(Number(data.maxPrice ?? 0));
+        const nextMax = Math.max(nextMin + 100, normalizedMax || nextMin + 100);
+        const nextPriceRange = [nextMin, nextMax];
+
+        setFilterOptions({
+          categories: withAll(data.categories?.length ? data.categories : fallbackCategoryOptions),
+          genders: withAll(data.genders?.length ? data.genders : fallbackGenderOptions),
+          sizes: data.sizes?.length ? data.sizes : fallbackSizeOptions,
+          colors: data.colors?.length ? data.colors : fallbackColorOptions,
+          brands: withAll(data.brands || []),
+          materials: withAll(data.materials || []),
+          fits: withAll(data.fits || [])
+        });
+        setPriceBounds({ min: nextMin, max: nextMax });
+        setFilters((current) => ({ ...current, priceRange: [...nextPriceRange] }));
+        setAppliedFilters((current) => ({ ...current, priceRange: [...nextPriceRange] }));
+      } catch {
+        setFilterOptions(fallbackFilterOptions);
+      } finally {
+        setLoadingFilterOptions(false);
+      }
+    };
+
+    fetchFilterOptions();
+  }, []);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -66,8 +122,12 @@ const HomePage = () => {
         if (appliedFilters.search.trim()) params.search = appliedFilters.search.trim();
         if (appliedFilters.category !== 'All') params.category = appliedFilters.category;
         if (appliedFilters.gender !== 'All') params.gender = appliedFilters.gender;
+        if (appliedFilters.brand !== 'All') params.brand = appliedFilters.brand;
+        if (appliedFilters.material !== 'All') params.material = appliedFilters.material;
+        if (appliedFilters.fit !== 'All') params.fit = appliedFilters.fit;
         if (appliedFilters.size) params.size = appliedFilters.size;
         if (appliedFilters.color) params.color = appliedFilters.color;
+        if (appliedFilters.availability !== 'all') params.availability = appliedFilters.availability;
 
         const { data } = await api.get('/products', { params });
         setProducts(data);
@@ -81,19 +141,34 @@ const HomePage = () => {
     fetchProducts();
   }, [appliedFilters]);
 
+  const hasAdvancedFilters =
+    Boolean(appliedFilters.search.trim()) ||
+    appliedFilters.category !== 'All' ||
+    appliedFilters.gender !== 'All' ||
+    appliedFilters.brand !== 'All' ||
+    appliedFilters.material !== 'All' ||
+    appliedFilters.fit !== 'All' ||
+    Boolean(appliedFilters.size) ||
+    Boolean(appliedFilters.color) ||
+    appliedFilters.availability !== 'all' ||
+    appliedFilters.priceRange[0] !== priceBounds.min ||
+    appliedFilters.priceRange[1] !== priceBounds.max ||
+    appliedFilters.sort !== 'newest';
+
   const heading = useMemo(() => {
     if (products.length === 0) return 'No Styles Found';
-    if (appliedFilters.search || appliedFilters.category !== 'All' || appliedFilters.gender !== 'All') return 'Filtered Styles';
+    if (hasAdvancedFilters) return 'Filtered Styles';
     return 'All Products';
-  }, [products.length, appliedFilters]);
+  }, [products.length, hasAdvancedFilters]);
 
   const applyFilters = () => {
     setAppliedFilters(filters);
   };
 
   const resetFilters = () => {
-    setFilters(initialFilters);
-    setAppliedFilters(initialFilters);
+    const resetTo = createInitialFilters([priceBounds.min, priceBounds.max]);
+    setFilters(resetTo);
+    setAppliedFilters(resetTo);
   };
 
   return (
@@ -121,12 +196,12 @@ const HomePage = () => {
       <PageHeader
         eyebrow="Store"
         title={heading}
-        subtitle="Filter by category, size, color and price with a fixed desktop sidebar."
+        subtitle="Filter by category, gender, brand, material, fit, size, color, stock and price."
         actions={
           <Stack direction="row" spacing={0.7} alignItems="center">
-            {loading && <CircularProgress size={14} />}
+            {(loading || loadingFilterOptions) && <CircularProgress size={14} />}
             <Typography color="text.secondary">
-              {loading ? 'Loading items...' : `${products.length} items`}
+              {loading || loadingFilterOptions ? 'Loading items...' : `${products.length} items`}
             </Typography>
           </Stack>
         }
@@ -164,7 +239,7 @@ const HomePage = () => {
                     label="Category"
                     onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
                   >
-                    {categoryOptions.map((option) => (
+                    {filterOptions.categories.map((option) => (
                       <MenuItem key={option} value={option}>
                         {option}
                       </MenuItem>
@@ -179,7 +254,52 @@ const HomePage = () => {
                     label="Gender"
                     onChange={(event) => setFilters((current) => ({ ...current, gender: event.target.value }))}
                   >
-                    {genderOptions.map((option) => (
+                    {filterOptions.genders.map((option) => (
+                      <MenuItem key={option} value={option}>
+                        {option}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small">
+                  <InputLabel>Brand</InputLabel>
+                  <Select
+                    value={filters.brand}
+                    label="Brand"
+                    onChange={(event) => setFilters((current) => ({ ...current, brand: event.target.value }))}
+                  >
+                    {filterOptions.brands.map((option) => (
+                      <MenuItem key={option} value={option}>
+                        {option}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small">
+                  <InputLabel>Material</InputLabel>
+                  <Select
+                    value={filters.material}
+                    label="Material"
+                    onChange={(event) => setFilters((current) => ({ ...current, material: event.target.value }))}
+                  >
+                    {filterOptions.materials.map((option) => (
+                      <MenuItem key={option} value={option}>
+                        {option}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small">
+                  <InputLabel>Fit</InputLabel>
+                  <Select
+                    value={filters.fit}
+                    label="Fit"
+                    onChange={(event) => setFilters((current) => ({ ...current, fit: event.target.value }))}
+                  >
+                    {filterOptions.fits.map((option) => (
                       <MenuItem key={option} value={option}>
                         {option}
                       </MenuItem>
@@ -195,7 +315,7 @@ const HomePage = () => {
                     onChange={(event) => setFilters((current) => ({ ...current, size: event.target.value }))}
                   >
                     <MenuItem value="">All Sizes</MenuItem>
-                    {sizeOptions.map((option) => (
+                    {filterOptions.sizes.map((option) => (
                       <MenuItem key={option} value={option}>
                         {option}
                       </MenuItem>
@@ -211,11 +331,24 @@ const HomePage = () => {
                     onChange={(event) => setFilters((current) => ({ ...current, color: event.target.value }))}
                   >
                     <MenuItem value="">All Colors</MenuItem>
-                    {colorOptions.map((option) => (
+                    {filterOptions.colors.map((option) => (
                       <MenuItem key={option} value={option}>
                         {option}
                       </MenuItem>
                     ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small">
+                  <InputLabel>Stock</InputLabel>
+                  <Select
+                    value={filters.availability}
+                    label="Stock"
+                    onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value }))}
+                  >
+                    <MenuItem value="all">All</MenuItem>
+                    <MenuItem value="in_stock">In Stock</MenuItem>
+                    <MenuItem value="out_of_stock">Out of Stock</MenuItem>
                   </Select>
                 </FormControl>
 
@@ -225,11 +358,14 @@ const HomePage = () => {
                   </Typography>
                   <Slider
                     value={filters.priceRange}
-                    onChange={(event, nextValue) => setFilters((current) => ({ ...current, priceRange: nextValue }))}
+                    onChange={(event, nextValue) => {
+                      if (!Array.isArray(nextValue)) return;
+                      setFilters((current) => ({ ...current, priceRange: nextValue }));
+                    }}
                     valueLabelDisplay="auto"
-                    min={500}
-                    max={8000}
-                    step={100}
+                    min={priceBounds.min}
+                    max={priceBounds.max}
+                    step={50}
                     size="small"
                   />
                 </Box>
@@ -254,7 +390,7 @@ const HomePage = () => {
                     variant="contained"
                     onClick={applyFilters}
                     fullWidth
-                    disabled={loading}
+                    disabled={loading || loadingFilterOptions}
                     startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
                   >
                     {loading ? 'Applying...' : 'Apply'}
@@ -264,7 +400,7 @@ const HomePage = () => {
                     startIcon={<RestartAltOutlinedIcon fontSize="small" />}
                     onClick={resetFilters}
                     fullWidth
-                    disabled={loading}
+                    disabled={loading || loadingFilterOptions}
                   >
                     Reset
                   </Button>

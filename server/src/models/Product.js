@@ -22,6 +22,10 @@ const variantSchema = new mongoose.Schema(
       required: true,
       min: 0,
       default: 0
+    },
+    images: {
+      type: [String],
+      default: []
     }
   },
   { _id: false }
@@ -43,6 +47,10 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: 'https://placehold.co/600x400?text=Product'
     },
+    images: {
+      type: [String],
+      default: []
+    },
     brand: {
       type: String,
       default: 'Generic'
@@ -54,7 +62,7 @@ const productSchema = new mongoose.Schema(
     },
     gender: {
       type: String,
-      enum: ['Men', 'Women', 'Unisex'],
+      trim: true,
       default: 'Unisex'
     },
     sizes: {

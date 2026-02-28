@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 const WishlistContext = createContext(null);
+const fallbackImage = 'https://placehold.co/600x400?text=Product';
 
 const parseWishlist = () => {
   const raw = localStorage.getItem('wishlist');
@@ -34,18 +35,49 @@ const resolveDefaultVariant = (product) => {
   return product.variants[0];
 };
 
-const toWishlistItem = (product) => {
-  const defaultVariant = resolveDefaultVariant(product);
-  const selectedSize = defaultVariant?.size || product.sizes?.[0] || '';
-  const selectedColor = defaultVariant?.color || product.colors?.[0] || '';
-  const price = Number(defaultVariant?.price ?? product.price ?? 0);
-  const countInStock = Number(defaultVariant?.stock ?? product.countInStock ?? 0);
+const findVariant = (product, selectedSize, selectedColor) => {
+  if (!Array.isArray(product?.variants) || product.variants.length === 0) {
+    return null;
+  }
+
+  if (!selectedSize) {
+    return null;
+  }
+
+  const sizeMatches = product.variants.filter((variant) => variant.size === selectedSize);
+
+  if (sizeMatches.length === 0) {
+    return null;
+  }
+
+  if (!selectedColor) {
+    return sizeMatches[0];
+  }
+
+  return sizeMatches.find((variant) => (variant.color || '') === selectedColor) || null;
+};
+
+const getFirstImage = (images) => {
+  if (!Array.isArray(images)) return '';
+  return images.find(Boolean) || '';
+};
+
+const toWishlistItem = (product, options = {}) => {
+  const requestedSize = String(options.selectedSize || '').trim();
+  const requestedColor = String(options.selectedColor || '').trim();
+
+  const variant = findVariant(product, requestedSize, requestedColor) || resolveDefaultVariant(product);
+  const selectedSize = requestedSize || variant?.size || product.sizes?.[0] || '';
+  const selectedColor = requestedColor || variant?.color || product.colors?.[0] || '';
+  const price = Number(variant?.price ?? product.price ?? 0);
+  const countInStock = Number(variant?.stock ?? product.countInStock ?? 0);
+  const image = getFirstImage(variant?.images) || getFirstImage(product?.images) || product.image || fallbackImage;
 
   return {
     _id: product._id,
     productId: product._id,
     name: product.name,
-    image: product.image,
+    image,
     brand: product.brand || '',
     category: product.category || '',
     gender: product.gender || '',
@@ -64,7 +96,7 @@ export const WishlistProvider = ({ children }) => {
     localStorage.setItem('wishlist', JSON.stringify(items));
   }, [items]);
 
-  const addToWishlist = useCallback((product) => {
+  const addToWishlist = useCallback((product, options = {}) => {
     if (!product?._id) return;
 
     setItems((current) => {
@@ -72,7 +104,7 @@ export const WishlistProvider = ({ children }) => {
         return current;
       }
 
-      return [toWishlistItem(product), ...current];
+      return [toWishlistItem(product, options), ...current];
     });
   }, []);
 
@@ -81,7 +113,7 @@ export const WishlistProvider = ({ children }) => {
     setItems((current) => current.filter((item) => item.productId !== productId));
   }, []);
 
-  const toggleWishlist = useCallback((product) => {
+  const toggleWishlist = useCallback((product, options = {}) => {
     if (!product?._id) return;
 
     setItems((current) => {
@@ -89,7 +121,7 @@ export const WishlistProvider = ({ children }) => {
       if (exists) {
         return current.filter((item) => item.productId !== product._id);
       }
-      return [toWishlistItem(product), ...current];
+      return [toWishlistItem(product, options), ...current];
     });
   }, []);
 

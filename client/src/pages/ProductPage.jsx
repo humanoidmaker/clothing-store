@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  ButtonBase,
   Button,
   Card,
   Chip,
   CircularProgress,
   Divider,
-  Grid,
   MenuItem,
   Stack,
   TextField,
@@ -18,11 +18,14 @@ import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlin
 import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import PageHeader from '../components/PageHeader';
+import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import api from '../api';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { formatINR } from '../utils/currency';
+
+const placeholderImage = 'https://placehold.co/900x1200?text=Product';
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -33,6 +36,7 @@ const ProductPage = () => {
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
+  const [activeImage, setActiveImage] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -44,6 +48,8 @@ const ProductPage = () => {
       try {
         const { data } = await api.get(`/products/${id}`);
         setProduct(data);
+        setQuantity(1);
+        setActiveImage('');
       } catch (requestError) {
         setError(requestError.response?.data?.message || 'Failed to load product');
       } finally {
@@ -126,6 +132,62 @@ const ProductPage = () => {
     return sizeMatches[0];
   }, [variants, selectedSize, selectedColor]);
 
+  const productGalleryImages = useMemo(() => {
+    if (!product) return [];
+
+    const images = [];
+    if (Array.isArray(product.images)) {
+      images.push(...product.images.filter(Boolean));
+    }
+    if (product.image) {
+      images.push(product.image);
+    }
+
+    return [...new Set(images)];
+  }, [product]);
+
+  const selectedVariantImages = useMemo(() => {
+    if (!selectedVariant || !Array.isArray(selectedVariant.images)) return [];
+    return selectedVariant.images.filter(Boolean);
+  }, [selectedVariant]);
+
+  const galleryImages = useMemo(() => {
+    if (selectedVariantImages.length > 0) {
+      return selectedVariantImages;
+    }
+
+    if (productGalleryImages.length > 0) {
+      return productGalleryImages;
+    }
+
+    const firstVariantWithImages = variants.find(
+      (variant) => Array.isArray(variant.images) && variant.images.length > 0
+    );
+
+    if (firstVariantWithImages) {
+      return firstVariantWithImages.images.filter(Boolean);
+    }
+
+    return [placeholderImage];
+  }, [selectedVariantImages, productGalleryImages, variants]);
+
+  useEffect(() => {
+    if (selectedVariantImages.length > 0) {
+      setActiveImage(selectedVariantImages[0]);
+    }
+  }, [selectedVariantImages]);
+
+  useEffect(() => {
+    if (galleryImages.length === 0) {
+      setActiveImage('');
+      return;
+    }
+
+    if (!activeImage || !galleryImages.includes(activeImage)) {
+      setActiveImage(galleryImages[0]);
+    }
+  }, [galleryImages, activeImage]);
+
   const selectedPrice = Number(selectedVariant?.price ?? product?.price ?? 0);
   const availableStock = Number(selectedVariant?.stock ?? product?.countInStock ?? 0);
   const maxQty = Math.max(1, availableStock || 1);
@@ -153,21 +215,61 @@ const ProductPage = () => {
       <PageHeader
         eyebrow="Product"
         title={product.name}
-        subtitle={`${product.brand} · ${product.category} · ${product.gender}`}
+        subtitle={`${product.brand} - ${product.category} - ${product.gender}`}
       />
 
       <Card sx={{ p: { xs: 1.2, md: 1.6 } }}>
-        <Grid container spacing={1.5}>
-          <Grid item xs={12} lg={6}>
-            <Box
-              component="img"
-              src={product.image}
-              alt={product.name}
-              sx={{ width: '100%', height: { xs: 280, md: 420 }, objectFit: 'cover' }}
-            />
-          </Grid>
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1.5,
+            gridTemplateColumns: { xs: '1fr', lg: '40% 60%' },
+            alignItems: 'start'
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Stack spacing={0.8}>
+              <ProductImageViewport
+                src={activeImage || galleryImages[0] || placeholderImage}
+                alt={product.name}
+                aspectRatio="1 / 1"
+                fit="contain"
+                containerSx={{
+                  width: '100%',
+                  bgcolor: 'grey.50'
+                }}
+                imageSx={{ p: 0 }}
+              />
+              <Stack direction="row" spacing={0.6} sx={{ overflowX: 'auto', pb: 0.3 }}>
+                {galleryImages.map((image, index) => {
+                  const isSelected = image === activeImage;
+                  return (
+                    <ButtonBase
+                      key={`${image}-${index}`}
+                      onClick={() => setActiveImage(image)}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: isSelected ? 'primary.main' : 'divider',
+                        width: 72,
+                        minWidth: 72,
+                        flex: '0 0 auto'
+                      }}
+                    >
+                      <ProductImageViewport
+                        src={image}
+                        alt={`${product.name} ${index + 1}`}
+                        aspectRatio="1 / 1"
+                        fit="cover"
+                        containerSx={{ border: 'none', bgcolor: 'grey.100' }}
+                      />
+                    </ButtonBase>
+                  );
+                })}
+              </Stack>
+            </Stack>
+          </Box>
 
-          <Grid item xs={12} lg={6}>
+          <Box sx={{ minWidth: 0 }}>
             <Stack spacing={1.5}>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 <Chip label={product.category} />
@@ -176,9 +278,16 @@ const ProductPage = () => {
               </Stack>
 
               <Typography variant="h4">{product.name}</Typography>
-              <Typography variant="body1" color="text.secondary">
-                {product.description}
-              </Typography>
+              <Typography
+                component="div"
+                variant="body1"
+                color="text.secondary"
+                sx={{
+                  '& p': { mt: 0, mb: 0.8 },
+                  '& ul': { mt: 0, mb: 0.8, pl: 2 }
+                }}
+                dangerouslySetInnerHTML={{ __html: product.description }}
+              />
 
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <Typography variant="body2" color="text.secondary">
@@ -243,16 +352,27 @@ const ProductPage = () => {
                         key={`${variant.size}-${variant.color}-${index}`}
                         direction="row"
                         justifyContent="space-between"
+                        onClick={() => {
+                          setSelectedSize(variant.size);
+                          setSelectedColor(variant.color || '');
+                        }}
                         sx={{
                           px: 0.8,
                           py: 0.5,
+                          cursor: 'pointer',
                           border: '1px solid',
                           borderColor:
                             selectedVariant &&
                             selectedVariant.size === variant.size &&
                             (selectedVariant.color || '') === (variant.color || '')
                               ? 'primary.main'
-                              : 'divider'
+                              : 'divider',
+                          bgcolor:
+                            selectedVariant &&
+                            selectedVariant.size === variant.size &&
+                            (selectedVariant.color || '') === (variant.color || '')
+                              ? 'action.selected'
+                              : 'transparent'
                         }}
                       >
                         <Typography variant="caption">
@@ -260,7 +380,7 @@ const ProductPage = () => {
                           {variant.color ? ` / ${variant.color}` : ''}
                         </Typography>
                         <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                          {formatINR(variant.price)} · {variant.stock} in stock
+                          {formatINR(variant.price)} - {variant.stock} in stock
                         </Typography>
                       </Stack>
                     ))}
@@ -309,7 +429,7 @@ const ProductPage = () => {
                   variant={wished ? 'contained' : 'outlined'}
                   color="secondary"
                   startIcon={wished ? <FavoriteOutlinedIcon /> : <FavoriteBorderOutlinedIcon />}
-                  onClick={() => toggleWishlist(product)}
+                  onClick={() => toggleWishlist(product, { selectedSize, selectedColor })}
                 >
                   {wished ? 'Wishlisted' : 'Wishlist'}
                 </Button>
@@ -318,8 +438,8 @@ const ProductPage = () => {
                 </Button>
               </Stack>
             </Stack>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Card>
     </Box>
   );

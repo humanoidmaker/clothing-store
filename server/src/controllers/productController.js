@@ -1,5 +1,7 @@
 const Product = require('../models/Product');
 
+const defaultImage = 'https://placehold.co/600x400?text=Product';
+
 const normalizeList = (value) => {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -10,6 +12,32 @@ const normalizeList = (value) => {
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+  }
+
+  return [];
+};
+
+const normalizeImageList = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item).trim()).filter(Boolean);
+        }
+      } catch {
+        // fall through to single string interpretation
+      }
+    }
+
+    return [trimmed];
   }
 
   return [];
@@ -36,6 +64,7 @@ const normalizeVariants = (value) => {
       const color = String(variant?.color || '').trim();
       const price = Number(variant?.price);
       const stock = Number(variant?.stock);
+      const images = normalizeImageList(variant?.images);
 
       if (!size || Number.isNaN(price) || price < 0 || Number.isNaN(stock) || stock < 0) {
         return null;
@@ -45,7 +74,8 @@ const normalizeVariants = (value) => {
         size,
         color,
         price,
-        stock
+        stock,
+        images
       };
     })
     .filter(Boolean);
@@ -69,13 +99,57 @@ const getVariantMeta = (variants) => {
   };
 };
 
+const resolvePrimaryImage = (images, variants, fallbackImage) => {
+  const normalizedImages = normalizeImageList(images);
+  const normalizedFallback = String(fallbackImage || '').trim();
+  const firstVariantImage =
+    (Array.isArray(variants) ? variants : []).find((variant) => Array.isArray(variant.images) && variant.images.length > 0)
+      ?.images?.[0] || '';
+
+  const primaryImage = normalizedImages[0] || normalizedFallback || firstVariantImage || defaultImage;
+  const finalImages =
+    normalizedImages.length > 0
+      ? normalizedImages
+      : primaryImage
+        ? [primaryImage]
+        : [defaultImage];
+
+  return { primaryImage, finalImages };
+};
+
+const sortValues = (values) =>
+  values
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
 const getProducts = async (req, res) => {
-  const { search, category, gender, size, color, minPrice, maxPrice, sort = 'newest' } = req.query;
+  const {
+    search,
+    category,
+    gender,
+    size,
+    color,
+    brand,
+    material,
+    fit,
+    availability,
+    minPrice,
+    maxPrice,
+    sort = 'newest'
+  } = req.query;
 
   const filters = {};
 
   if (search) {
-    filters.name = { $regex: search, $options: 'i' };
+    const searchRegex = { $regex: search, $options: 'i' };
+    filters.$or = [
+      { name: searchRegex },
+      { brand: searchRegex },
+      { category: searchRegex },
+      { material: searchRegex },
+      { fit: searchRegex }
+    ];
   }
 
   if (category && category !== 'All') {
@@ -92,6 +166,26 @@ const getProducts = async (req, res) => {
 
   if (color) {
     filters.colors = { $in: [color] };
+  }
+
+  if (brand && brand !== 'All') {
+    filters.brand = brand;
+  }
+
+  if (material && material !== 'All') {
+    filters.material = material;
+  }
+
+  if (fit && fit !== 'All') {
+    filters.fit = fit;
+  }
+
+  if (availability === 'in_stock') {
+    filters.countInStock = { $gt: 0 };
+  }
+
+  if (availability === 'out_of_stock') {
+    filters.countInStock = { $lte: 0 };
   }
 
   if (minPrice || maxPrice) {
@@ -124,6 +218,42 @@ const getProducts = async (req, res) => {
   return res.json(products);
 };
 
+const getProductFilterOptions = async (req, res) => {
+  const [categories, genders, sizes, colors, brands, materials, fits, priceStats] = await Promise.all([
+    Product.distinct('category'),
+    Product.distinct('gender'),
+    Product.distinct('sizes'),
+    Product.distinct('colors'),
+    Product.distinct('brand'),
+    Product.distinct('material'),
+    Product.distinct('fit'),
+    Product.aggregate([
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: '$price' },
+          maxPrice: { $max: '$price' }
+        }
+      }
+    ])
+  ]);
+
+  const minPrice = Number(priceStats?.[0]?.minPrice ?? 0);
+  const maxPrice = Number(priceStats?.[0]?.maxPrice ?? 0);
+
+  return res.json({
+    categories: sortValues(categories),
+    genders: sortValues(genders),
+    sizes: sortValues(sizes),
+    colors: sortValues(colors),
+    brands: sortValues(brands),
+    materials: sortValues(materials),
+    fits: sortValues(fits),
+    minPrice: Number.isFinite(minPrice) ? minPrice : 0,
+    maxPrice: Number.isFinite(maxPrice) ? maxPrice : 0
+  });
+};
+
 const getProductById = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) {
@@ -138,6 +268,7 @@ const createProduct = async (req, res) => {
     name,
     description,
     image,
+    images,
     brand,
     category,
     gender,
@@ -167,10 +298,13 @@ const createProduct = async (req, res) => {
     return res.status(400).json({ message: 'Price must be a valid positive number' });
   }
 
+  const { primaryImage, finalImages } = resolvePrimaryImage(images, normalizedVariants, image);
+
   const product = await Product.create({
     name,
     description,
-    image,
+    image: primaryImage,
+    images: finalImages,
     brand,
     category,
     gender,
@@ -196,7 +330,6 @@ const updateProduct = async (req, res) => {
   const fields = [
     'name',
     'description',
-    'image',
     'brand',
     'category',
     'gender',
@@ -210,6 +343,17 @@ const updateProduct = async (req, res) => {
       product[field] = req.body[field];
     }
   });
+
+  const hasImageField = Object.prototype.hasOwnProperty.call(req.body, 'image');
+  const hasImagesField = Object.prototype.hasOwnProperty.call(req.body, 'images');
+
+  if (hasImageField) {
+    product.image = String(req.body.image || '').trim();
+  }
+
+  if (hasImagesField) {
+    product.images = normalizeImageList(req.body.images);
+  }
 
   if (req.body.sizes !== undefined) {
     product.sizes = normalizeList(req.body.sizes);
@@ -233,6 +377,11 @@ const updateProduct = async (req, res) => {
     }
   }
 
+  const imageFallback = hasImageField ? product.image : hasImagesField ? '' : product.image;
+  const { primaryImage, finalImages } = resolvePrimaryImage(product.images, product.variants, imageFallback);
+  product.image = primaryImage;
+  product.images = finalImages;
+
   const updatedProduct = await product.save();
   return res.json(updatedProduct);
 };
@@ -250,6 +399,7 @@ const deleteProduct = async (req, res) => {
 
 module.exports = {
   getProducts,
+  getProductFilterOptions,
   getProductById,
   createProduct,
   updateProduct,
