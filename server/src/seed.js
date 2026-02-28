@@ -1,9 +1,11 @@
-﻿const dotenv = require('dotenv');
+const path = require('path');
+const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const User = require('./models/User');
 const Product = require('./models/Product');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const sampleProducts = [
   {
@@ -217,3 +219,4 @@ const seed = async () => {
 };
 
 seed();
+

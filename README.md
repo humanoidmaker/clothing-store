@@ -1,29 +1,30 @@
-# Astra Attire Ecommerce (Node.js + React + MongoDB)
+# Astra Attire Ecommerce (Next.js + Express + MongoDB)
 
-A clothing-focused ecommerce web app built with:
+A clothing-focused ecommerce app migrated to a Next.js-hosted runtime while preserving all storefront and admin features.
 
-- Backend: Node.js, Express, MongoDB (Mongoose), JWT auth
-- Frontend: React + Vite + Material UI
+## Stack
+
+- Frontend host: Next.js (App Router catch-all)
+- UI: React + Material UI
+- API: Express + MongoDB (Mongoose) mounted at `/api` inside the same Node process
+- Auth: JWT
 - Payments: Razorpay (test mode)
-- Currency: INR (Indian Rupees)
+- Currency: INR
 
-## What changed
+## What Was Preserved
 
-This project is now fashion-specific (not general-purpose ecommerce):
+- Storefront product catalog, filters, cart, wishlist, checkout, order history, invoice page
+- Admin products, orders, settings
+- Admin business reporting with filters, charts, and cost-based profit/loss (using `purchasePrice`)
+- Variant pricing/stock/image support
+- Razorpay verification flow
 
-- Clothing catalog with fields like `gender`, `sizes`, `colors`, `material`, `fit`
-- Material UI based storefront with a styled theme
-- Advanced filters: search, category, gender, size, color, price range, sorting
-- Product detail variant selection (size + color)
-- Variant pricing support: each size/color can have different price + stock
-- Cart stores variants as separate line items
-- Product detail page supports choosing size/color before adding to cart
+## Project Structure
 
-## Project structure
-
-- `server/` Express API and MongoDB models
-- `client/` React + MUI storefront/admin UI
-- `package.json` root workspace scripts
+- `app/` Next.js App Router shell
+- `client/src/` existing React UI modules and pages (rendered by Next catch-all page)
+- `server/src/` Express API, models, controllers, seed script
+- `server.js` unified runtime that serves both Next pages and `/api`
 
 ## Setup
 
@@ -31,30 +32,29 @@ This project is now fashion-specific (not general-purpose ecommerce):
    ```bash
    npm install
    ```
-2. Create env files:
-   - Copy `server/.env.example` to `server/.env`
-   - Copy `client/.env.example` to `client/.env`
-3. Add Razorpay test keys in `server/.env`:
+2. Create env file:
+   - Copy `.env.example` to `.env`
+3. Add Razorpay test keys in `.env`:
    - `RAZORPAY_KEY_ID=rzp_test_...`
    - `RAZORPAY_KEY_SECRET=...`
-4. Seed clothing catalog:
+4. Seed data:
    ```bash
    npm run seed
    ```
-5. Start frontend + backend:
+5. Start the app:
    ```bash
    npm run dev
    ```
 
-- API: `http://localhost:5000`
-- Frontend: `http://localhost:5173`
+- App + API: `http://localhost:3000`
+- Health check: `http://localhost:3000/api/health`
 
-## Default seeded admin
+## Default Seeded Admin
 
 - Email: `admin@example.com`
 - Password: `admin123`
 
-## Main API routes
+## Main API Routes
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
@@ -74,9 +74,6 @@ This project is now fashion-specific (not general-purpose ecommerce):
 
 ## Notes
 
-- Prices are stored/displayed in INR.
-- Seeded sample catalog includes Nike shoes with size-wise pricing.
-- Admin dashboard can create, edit, delete products and update order statuses (`pending`, `processing`, `paid`, `shipped`, `delivered`, `cancelled`).
-- Admin dashboard includes business reports with filterable profit/loss metrics based on product and variant purchase price (COGS), plus status/payment breakdowns, trend charts, and top product reports.
-- Admin can create variant pricing with `variants` JSON (`size`, `color`, `price`, `purchasePrice`, `stock`).
-- If you previously seeded older products, run `npm run seed` again to load the new clothing dataset.
+- Product and variant forms include `purchasePrice` so reports calculate real cost-based profit/loss.
+- Existing older orders without item `purchasePrice` use product fallback purchase pricing in reports.
+- If you seeded before purchase pricing support, re-run `npm run seed` to refresh sample cost data.

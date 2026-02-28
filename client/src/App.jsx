@@ -1,3 +1,5 @@
+'use client';
+
 import { useMemo } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Box, Container, CssBaseline, GlobalStyles, ThemeProvider } from '@mui/material';
