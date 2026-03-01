@@ -1,7 +1,24 @@
 const Product = require('../models/Product');
+const StoreSettings = require('../models/StoreSettings');
 const { isDataImageUrl, saveImageDataUrlToStorage } = require('../utils/mediaStorage');
 
 const defaultImage = 'https://placehold.co/600x400?text=Product';
+const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
+
+const parseBooleanQueryFlag = (value) =>
+  ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+
+const shouldIncludeOutOfStockProducts = async (req) => {
+  const isAdminOverride =
+    Boolean(req.user?.isAdmin) && parseBooleanQueryFlag(req.query?.includeOutOfStock);
+
+  if (isAdminOverride) {
+    return true;
+  }
+
+  const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('showOutOfStockProducts');
+  return Boolean(settings?.showOutOfStockProducts);
+};
 
 const normalizeList = (value) => {
   if (Array.isArray(value)) {
@@ -242,12 +259,21 @@ const getProducts = async (req, res) => {
     filters.fit = fit;
   }
 
-  if (availability === 'in_stock') {
-    filters.countInStock = { $gt: 0 };
-  }
+  const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
 
-  if (availability === 'out_of_stock') {
-    filters.countInStock = { $lte: 0 };
+  if (!includeOutOfStockProducts) {
+    filters.countInStock = { $gt: 0 };
+    if (availability === 'out_of_stock') {
+      // Out-of-stock listing is globally hidden, so force no results.
+      filters._id = { $exists: false };
+    }
+  } else {
+    if (availability === 'in_stock') {
+      filters.countInStock = { $gt: 0 };
+    }
+    if (availability === 'out_of_stock') {
+      filters.countInStock = { $lte: 0 };
+    }
   }
 
   if (minPrice || maxPrice) {
@@ -303,15 +329,19 @@ const getProducts = async (req, res) => {
 };
 
 const getProductFilterOptions = async (req, res) => {
+  const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
+  const visibilityFilters = includeOutOfStockProducts ? {} : { countInStock: { $gt: 0 } };
+
   const [categories, genders, sizes, colors, brands, materials, fits, priceStats] = await Promise.all([
-    Product.distinct('category'),
-    Product.distinct('gender'),
-    Product.distinct('sizes'),
-    Product.distinct('colors'),
-    Product.distinct('brand'),
-    Product.distinct('material'),
-    Product.distinct('fit'),
+    Product.distinct('category', visibilityFilters),
+    Product.distinct('gender', visibilityFilters),
+    Product.distinct('sizes', visibilityFilters),
+    Product.distinct('colors', visibilityFilters),
+    Product.distinct('brand', visibilityFilters),
+    Product.distinct('material', visibilityFilters),
+    Product.distinct('fit', visibilityFilters),
     Product.aggregate([
+      ...(includeOutOfStockProducts ? [] : [{ $match: visibilityFilters }]),
       {
         $group: {
           _id: null,
@@ -341,6 +371,11 @@ const getProductFilterOptions = async (req, res) => {
 const getProductById = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+
+  const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
+  if (!includeOutOfStockProducts && Number(product.countInStock || 0) <= 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 

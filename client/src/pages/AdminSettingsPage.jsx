@@ -7,8 +7,10 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  FormControlLabel,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography
 } from '@mui/material';
@@ -36,9 +38,10 @@ const colorInputSx = {
 };
 
 const AdminSettingsPage = () => {
-  const { storeName, footerText, themeSettings, updateStoreSettings } = useStoreSettings();
+  const { storeName, footerText, showOutOfStockProducts, themeSettings, updateStoreSettings } = useStoreSettings();
   const [nameDraft, setNameDraft] = useState(storeName);
   const [footerTextDraft, setFooterTextDraft] = useState(footerText);
+  const [showOutOfStockDraft, setShowOutOfStockDraft] = useState(showOutOfStockProducts);
   const [themeDraft, setThemeDraft] = useState(() => normalizeThemeSettings(themeSettings));
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -47,8 +50,9 @@ const AdminSettingsPage = () => {
   useEffect(() => {
     setNameDraft(storeName);
     setFooterTextDraft(footerText);
+    setShowOutOfStockDraft(showOutOfStockProducts);
     setThemeDraft(normalizeThemeSettings(themeSettings));
-  }, [storeName, footerText, themeSettings]);
+  }, [storeName, footerText, showOutOfStockProducts, themeSettings]);
 
   const onThemeFieldChange = (field, value) => {
     setThemeDraft((current) => ({
@@ -71,6 +75,7 @@ const AdminSettingsPage = () => {
       const updatedSettings = await updateStoreSettings({
         storeName: nameDraft,
         footerText: footerTextDraft,
+        showOutOfStockProducts: showOutOfStockDraft,
         theme: themeDraft
       });
       setSuccess(`Settings updated. Store name: "${updatedSettings.storeName}"`);
@@ -132,6 +137,22 @@ const AdminSettingsPage = () => {
                 helperText="Shown at the bottom-right of website footer."
               />
             </Box>
+
+            <Divider />
+
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Catalog Visibility
+            </Typography>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showOutOfStockDraft}
+                  onChange={(event) => setShowOutOfStockDraft(event.target.checked)}
+                />
+              }
+              label="Show out-of-stock products across storefront"
+            />
 
             <Divider />
 

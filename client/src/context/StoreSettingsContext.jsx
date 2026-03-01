@@ -5,6 +5,7 @@ import { defaultThemeSettings, normalizeThemeSettings } from '../theme';
 const StoreSettingsContext = createContext(null);
 const defaultStoreName = 'Astra Attire';
 const defaultFooterText = 'Premium everyday clothing, delivered across India.';
+const defaultShowOutOfStockProducts = false;
 
 const normalizeStoreName = (value) => String(value || '').trim() || defaultStoreName;
 const normalizeFooterText = (value) => String(value || '').trim() || defaultFooterText;
@@ -12,21 +13,28 @@ const normalizeFooterText = (value) => String(value || '').trim() || defaultFoot
 export const StoreSettingsProvider = ({ children }) => {
   const [storeName, setStoreName] = useState(defaultStoreName);
   const [footerText, setFooterText] = useState(defaultFooterText);
+  const [showOutOfStockProducts, setShowOutOfStockProducts] = useState(defaultShowOutOfStockProducts);
   const [themeSettings, setThemeSettings] = useState(defaultThemeSettings);
   const [loading, setLoading] = useState(true);
 
   const applySettingsFromResponse = useCallback((data) => {
     const nextStoreName = normalizeStoreName(data?.storeName);
     const nextFooterText = normalizeFooterText(data?.footerText);
+    const nextShowOutOfStockProducts =
+      typeof data?.showOutOfStockProducts === 'boolean'
+        ? data.showOutOfStockProducts
+        : defaultShowOutOfStockProducts;
     const nextThemeSettings = normalizeThemeSettings(data?.theme || {});
 
     setStoreName(nextStoreName);
     setFooterText(nextFooterText);
+    setShowOutOfStockProducts(nextShowOutOfStockProducts);
     setThemeSettings(nextThemeSettings);
 
     return {
       storeName: nextStoreName,
       footerText: nextFooterText,
+      showOutOfStockProducts: nextShowOutOfStockProducts,
       theme: nextThemeSettings
     };
   }, []);
@@ -38,6 +46,9 @@ export const StoreSettingsProvider = ({ children }) => {
     } catch {
       setStoreName((current) => current || defaultStoreName);
       setFooterText((current) => current || defaultFooterText);
+      setShowOutOfStockProducts((current) =>
+        typeof current === 'boolean' ? current : defaultShowOutOfStockProducts
+      );
       setThemeSettings((current) => normalizeThemeSettings(current || defaultThemeSettings));
     } finally {
       setLoading(false);
@@ -49,7 +60,12 @@ export const StoreSettingsProvider = ({ children }) => {
   }, [refreshSettings]);
 
   const updateStoreSettings = useCallback(
-    async ({ storeName: nextStoreName, footerText: nextFooterText, theme: nextTheme } = {}) => {
+    async ({
+      storeName: nextStoreName,
+      footerText: nextFooterText,
+      showOutOfStockProducts: nextShowOutOfStockProducts,
+      theme: nextTheme
+    } = {}) => {
       const payload = {};
 
       if (nextStoreName !== undefined) {
@@ -58,6 +74,10 @@ export const StoreSettingsProvider = ({ children }) => {
 
       if (nextFooterText !== undefined) {
         payload.footerText = String(nextFooterText || '').trim();
+      }
+
+      if (nextShowOutOfStockProducts !== undefined) {
+        payload.showOutOfStockProducts = Boolean(nextShowOutOfStockProducts);
       }
 
       if (nextTheme !== undefined) {
@@ -82,13 +102,23 @@ export const StoreSettingsProvider = ({ children }) => {
     () => ({
       storeName,
       footerText,
+      showOutOfStockProducts,
       themeSettings,
       loading,
       refreshSettings,
       updateStoreName,
       updateStoreSettings
     }),
-    [storeName, footerText, themeSettings, loading, refreshSettings, updateStoreName, updateStoreSettings]
+    [
+      storeName,
+      footerText,
+      showOutOfStockProducts,
+      themeSettings,
+      loading,
+      refreshSettings,
+      updateStoreName,
+      updateStoreSettings
+    ]
   );
 
   return <StoreSettingsContext.Provider value={value}>{children}</StoreSettingsContext.Provider>;

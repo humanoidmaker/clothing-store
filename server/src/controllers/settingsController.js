@@ -6,6 +6,7 @@ const defaultStoreName = 'Astra Attire';
 const defaultFooterText = 'Premium everyday clothing, delivered across India.';
 const defaultThemeSettings = StoreSettings.defaultThemeSettings;
 const defaultPaymentGatewaySettings = StoreSettings.defaultPaymentGatewaySettings;
+const defaultShowOutOfStockProducts = StoreSettings.defaultShowOutOfStockProducts;
 const hexColorPattern = /^#([0-9a-fA-F]{6})$/;
 
 const cloneGatewayDefaults = () => JSON.parse(JSON.stringify(defaultPaymentGatewaySettings));
@@ -63,6 +64,9 @@ const normalizeThemeOutput = (theme = {}) => ({
   bodyFontFamily: String(theme.bodyFontFamily || '').trim() || defaultThemeSettings.bodyFontFamily,
   headingFontFamily: String(theme.headingFontFamily || '').trim() || defaultThemeSettings.headingFontFamily
 });
+
+const normalizeShowOutOfStockProducts = (value) =>
+  typeof value === 'boolean' ? value : defaultShowOutOfStockProducts;
 
 const normalizePaymentGatewaysInput = (value = {}, legacyRazorpay = {}) => {
   const defaults = cloneGatewayDefaults();
@@ -245,6 +249,7 @@ const normalizePaymentGatewaysOutput = (value = {}) => {
 const buildResponse = (settings) => ({
   storeName: settings.storeName,
   footerText: settings.footerText,
+  showOutOfStockProducts: normalizeShowOutOfStockProducts(settings.showOutOfStockProducts),
   theme: normalizeThemeOutput(settings.theme)
 });
 
@@ -263,6 +268,7 @@ const ensureSettings = async () => {
       singletonKey: 'default',
       storeName: defaultStoreName,
       footerText: defaultFooterText,
+      showOutOfStockProducts: defaultShowOutOfStockProducts,
       theme: defaultThemeSettings,
       paymentGateways: defaultPaymentGatewaySettings
     });
@@ -278,6 +284,10 @@ const ensureSettings = async () => {
   }
   if (!settings.footerText) {
     settings.footerText = defaultFooterText;
+    touched = true;
+  }
+  if (typeof settings.showOutOfStockProducts !== 'boolean') {
+    settings.showOutOfStockProducts = defaultShowOutOfStockProducts;
     touched = true;
   }
 
@@ -708,10 +718,11 @@ const applyPaymentGatewayUpdates = (currentSettings, payload) => {
 const updateStoreSettings = async (req, res) => {
   const hasStoreName = Object.prototype.hasOwnProperty.call(req.body || {}, 'storeName');
   const hasFooterText = Object.prototype.hasOwnProperty.call(req.body || {}, 'footerText');
+  const hasShowOutOfStockProducts = Object.prototype.hasOwnProperty.call(req.body || {}, 'showOutOfStockProducts');
   const hasTheme = Object.prototype.hasOwnProperty.call(req.body || {}, 'theme');
   const hasPaymentGateways = Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentGateways');
 
-  if (!hasStoreName && !hasFooterText && !hasTheme && !hasPaymentGateways) {
+  if (!hasStoreName && !hasFooterText && !hasShowOutOfStockProducts && !hasTheme && !hasPaymentGateways) {
     return res.status(400).json({ message: 'No settings fields were provided' });
   }
 
@@ -737,6 +748,13 @@ const updateStoreSettings = async (req, res) => {
       return res.status(400).json({ message: 'Footer text must be 220 characters or less' });
     }
     settings.footerText = nextFooterText;
+  }
+
+  if (hasShowOutOfStockProducts) {
+    if (typeof req.body.showOutOfStockProducts !== 'boolean') {
+      return res.status(400).json({ message: 'showOutOfStockProducts must be a boolean value' });
+    }
+    settings.showOutOfStockProducts = req.body.showOutOfStockProducts;
   }
 
   if (hasTheme) {

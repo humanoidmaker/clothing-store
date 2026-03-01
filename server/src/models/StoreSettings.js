@@ -79,6 +79,7 @@ const defaultPaymentGatewaySettings = {
     updatedAt: null
   }
 };
+const defaultShowOutOfStockProducts = false;
 
 const storeSettingsSchema = new mongoose.Schema(
   {
@@ -101,6 +102,10 @@ const storeSettingsSchema = new mongoose.Schema(
       trim: true,
       default: 'Premium everyday clothing, delivered across India.',
       maxlength: 220
+    },
+    showOutOfStockProducts: {
+      type: Boolean,
+      default: defaultShowOutOfStockProducts
     },
     theme: {
       primaryColor: {
@@ -383,6 +388,7 @@ const storeSettingsSchema = new mongoose.Schema(
 storeSettingsSchema.statics.defaultThemeSettings = defaultThemeSettings;
 storeSettingsSchema.statics.defaultRazorpaySettings = defaultRazorpaySettings;
 storeSettingsSchema.statics.defaultPaymentGatewaySettings = defaultPaymentGatewaySettings;
+storeSettingsSchema.statics.defaultShowOutOfStockProducts = defaultShowOutOfStockProducts;
 
 module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
 

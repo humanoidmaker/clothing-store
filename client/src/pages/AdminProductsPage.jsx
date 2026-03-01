@@ -396,7 +396,11 @@ const AdminProductsPage = () => {
 
   const fetchCatalogOptions = async () => {
     try {
-      const { data } = await api.get('/products/filters');
+      const { data } = await api.get('/products/filters', {
+        params: {
+          includeOutOfStock: true
+        }
+      });
       setCatalogOptions({
         categories: Array.isArray(data?.categories) && data.categories.length > 0 ? data.categories : defaultCategoryOptions,
         genders: Array.isArray(data?.genders) && data.genders.length > 0 ? data.genders : defaultGenderOptions,
@@ -420,7 +424,8 @@ const AdminProductsPage = () => {
         params: {
           sort: 'newest',
           page: targetPage,
-          limit: targetRowsPerPage
+          limit: targetRowsPerPage,
+          includeOutOfStock: true
         }
       });
 
