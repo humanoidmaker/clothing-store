@@ -8,6 +8,69 @@ const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
 const parseBooleanQueryFlag = (value) =>
   ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 
+const buildEffectiveStockExpression = () => ({
+  $cond: [
+    { $gt: [{ $size: { $ifNull: ['$variants', []] } }, 0] },
+    {
+      $sum: {
+        $map: {
+          input: { $ifNull: ['$variants', []] },
+          as: 'variant',
+          in: { $ifNull: ['$$variant.stock', 0] }
+        }
+      }
+    },
+    { $ifNull: ['$countInStock', 0] }
+  ]
+});
+
+const getEffectiveProductStock = (product = {}) => {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  if (variants.length > 0) {
+    return variants.reduce((sum, variant) => sum + Number(variant?.stock || 0), 0);
+  }
+
+  return Number(product.countInStock || 0);
+};
+
+const sanitizeProductForStorefront = (product, includeOutOfStockProducts) => {
+  if (!product || includeOutOfStockProducts) {
+    return product;
+  }
+
+  const source = typeof product.toObject === 'function' ? product.toObject() : { ...product };
+  const variants = Array.isArray(source.variants) ? source.variants : [];
+
+  if (variants.length === 0) {
+    return source;
+  }
+
+  const visibleVariants = variants.filter((variant) => Number(variant?.stock || 0) > 0);
+  if (visibleVariants.length === variants.length) {
+    return source;
+  }
+
+  source.variants = visibleVariants;
+  source.sizes = [...new Set(visibleVariants.map((variant) => String(variant?.size || '').trim()).filter(Boolean))];
+  source.colors = [
+    ...new Set(visibleVariants.map((variant) => String(variant?.color || '').trim()).filter(Boolean))
+  ];
+
+  if (visibleVariants.length > 0) {
+    source.price = visibleVariants.reduce(
+      (min, variant) => (Number(variant?.price || 0) < min ? Number(variant?.price || 0) : min),
+      Number(visibleVariants[0]?.price || 0)
+    );
+    source.purchasePrice = visibleVariants.reduce(
+      (min, variant) => (Number(variant?.purchasePrice || 0) < min ? Number(variant?.purchasePrice || 0) : min),
+      Number(visibleVariants[0]?.purchasePrice || 0)
+    );
+    source.countInStock = visibleVariants.reduce((sum, variant) => sum + Number(variant?.stock || 0), 0);
+  }
+
+  return source;
+};
+
 const shouldIncludeOutOfStockProducts = async (req) => {
   const isAdminOverride =
     Boolean(req.user?.isAdmin) && parseBooleanQueryFlag(req.query?.includeOutOfStock);
@@ -261,18 +324,20 @@ const getProducts = async (req, res) => {
 
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
 
+  const effectiveStockExpr = buildEffectiveStockExpression();
+
   if (!includeOutOfStockProducts) {
-    filters.countInStock = { $gt: 0 };
+    filters.$expr = { $gt: [effectiveStockExpr, 0] };
     if (availability === 'out_of_stock') {
       // Out-of-stock listing is globally hidden, so force no results.
       filters._id = { $exists: false };
     }
   } else {
     if (availability === 'in_stock') {
-      filters.countInStock = { $gt: 0 };
+      filters.$expr = { $gt: [effectiveStockExpr, 0] };
     }
     if (availability === 'out_of_stock') {
-      filters.countInStock = { $lte: 0 };
+      filters.$expr = { $lte: [effectiveStockExpr, 0] };
     }
   }
 
@@ -316,9 +381,10 @@ const getProducts = async (req, res) => {
     .sort(sortBy[sort] || sortBy.newest)
     .skip(skip)
     .limit(limit);
+  const visibleProducts = products.map((product) => sanitizeProductForStorefront(product, includeOutOfStockProducts));
 
   return res.json({
-    products,
+    products: visibleProducts,
     page: currentPage,
     limit,
     totalItems,
@@ -330,7 +396,7 @@ const getProducts = async (req, res) => {
 
 const getProductFilterOptions = async (req, res) => {
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
-  const visibilityFilters = includeOutOfStockProducts ? {} : { countInStock: { $gt: 0 } };
+  const visibilityFilters = includeOutOfStockProducts ? {} : { $expr: { $gt: [buildEffectiveStockExpression(), 0] } };
 
   const [categories, genders, sizes, colors, brands, materials, fits, priceStats] = await Promise.all([
     Product.distinct('category', visibilityFilters),
@@ -375,11 +441,12 @@ const getProductById = async (req, res) => {
   }
 
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
-  if (!includeOutOfStockProducts && Number(product.countInStock || 0) <= 0) {
+  if (!includeOutOfStockProducts && getEffectiveProductStock(product) <= 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
-  return res.json(product);
+  const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
+  return res.json(visibleProduct);
 };
 
 const createProduct = async (req, res) => {

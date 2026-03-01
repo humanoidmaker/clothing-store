@@ -31,7 +31,9 @@ const ProductCard = ({ product }) => {
       )
     : Number(product.price);
 
-  const defaultVariant = hasVariants ? product.variants[0] : null;
+  const defaultVariant = hasVariants
+    ? product.variants.find((variant) => Number(variant?.stock || 0) > 0) || product.variants[0]
+    : null;
   const defaultSize = defaultVariant?.size || product.sizes?.[0] || '';
   const defaultColor = defaultVariant?.color || product.colors?.[0] || '';
   const defaultPrice = defaultVariant?.price ?? product.price;

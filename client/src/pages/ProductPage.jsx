@@ -94,9 +94,9 @@ const ProductPage = () => {
     if (!product) return;
 
     if (variants.length > 0) {
-      const firstVariant = variants[0];
-      setSelectedSize((current) => current || firstVariant.size || '');
-      setSelectedColor((current) => current || firstVariant.color || '');
+      const firstInStockVariant = variants.find((variant) => Number(variant?.stock || 0) > 0) || variants[0];
+      setSelectedSize((current) => current || firstInStockVariant.size || '');
+      setSelectedColor((current) => current || firstInStockVariant.color || '');
       return;
     }
 
@@ -119,6 +119,30 @@ const ProductPage = () => {
 
     if (selectedColor && !colorsForSelectedSize.includes(selectedColor)) {
       setSelectedColor(colorsForSelectedSize[0] || '');
+    }
+  }, [variants, selectedSize, selectedColor]);
+
+  useEffect(() => {
+    if (variants.length === 0) return;
+
+    const currentVariant = variants.find(
+      (variant) => variant.size === selectedSize && (variant.color || '') === (selectedColor || '')
+    );
+
+    if (currentVariant && Number(currentVariant.stock || 0) > 0) {
+      return;
+    }
+
+    const firstInStockVariant = variants.find((variant) => Number(variant?.stock || 0) > 0);
+    if (!firstInStockVariant) {
+      return;
+    }
+
+    if (selectedSize !== firstInStockVariant.size) {
+      setSelectedSize(firstInStockVariant.size || '');
+    }
+    if ((selectedColor || '') !== (firstInStockVariant.color || '')) {
+      setSelectedColor(firstInStockVariant.color || '');
     }
   }, [variants, selectedSize, selectedColor]);
 
