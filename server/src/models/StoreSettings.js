@@ -88,9 +88,9 @@ const defaultAuthSecuritySettings = {
     secretKeyEncrypted: '',
     updatedAt: null
   },
-  msg91Smtp: {
+  smtp: {
     enabled: false,
-    host: 'smtp.msg91.com',
+    host: 'smtp.example.com',
     port: 587,
     secure: false,
     username: '',
@@ -407,54 +407,54 @@ const storeSettingsSchema = new mongoose.Schema(
           default: defaultAuthSecuritySettings.recaptcha.updatedAt
         }
       },
-      msg91Smtp: {
+      smtp: {
         enabled: {
           type: Boolean,
-          default: defaultAuthSecuritySettings.msg91Smtp.enabled
+          default: defaultAuthSecuritySettings.smtp.enabled
         },
         host: {
           type: String,
           trim: true,
-          default: defaultAuthSecuritySettings.msg91Smtp.host,
+          default: defaultAuthSecuritySettings.smtp.host,
           maxlength: 180
         },
         port: {
           type: Number,
-          default: defaultAuthSecuritySettings.msg91Smtp.port,
+          default: defaultAuthSecuritySettings.smtp.port,
           min: 1,
           max: 65535
         },
         secure: {
           type: Boolean,
-          default: defaultAuthSecuritySettings.msg91Smtp.secure
+          default: defaultAuthSecuritySettings.smtp.secure
         },
         username: {
           type: String,
           trim: true,
-          default: defaultAuthSecuritySettings.msg91Smtp.username,
+          default: defaultAuthSecuritySettings.smtp.username,
           maxlength: 180
         },
         passwordEncrypted: {
           type: String,
           trim: true,
-          default: defaultAuthSecuritySettings.msg91Smtp.passwordEncrypted
+          default: defaultAuthSecuritySettings.smtp.passwordEncrypted
         },
         fromEmail: {
           type: String,
           trim: true,
           lowercase: true,
-          default: defaultAuthSecuritySettings.msg91Smtp.fromEmail,
+          default: defaultAuthSecuritySettings.smtp.fromEmail,
           maxlength: 180
         },
         fromName: {
           type: String,
           trim: true,
-          default: defaultAuthSecuritySettings.msg91Smtp.fromName,
+          default: defaultAuthSecuritySettings.smtp.fromName,
           maxlength: 140
         },
         updatedAt: {
           type: Date,
-          default: defaultAuthSecuritySettings.msg91Smtp.updatedAt
+          default: defaultAuthSecuritySettings.smtp.updatedAt
         }
       }
     },

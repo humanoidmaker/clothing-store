@@ -71,13 +71,44 @@ const normalizeThemeOutput = (theme = {}) => ({
 const normalizeShowOutOfStockProducts = (value) =>
   typeof value === 'boolean' ? value : defaultShowOutOfStockProducts;
 
+const extractSmtpConfig = (source = {}) => {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return {};
+  }
+
+  const direct = source.smtp;
+  if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
+    return direct;
+  }
+
+  const detected = Object.entries(source).find(([key, value]) => {
+    if (['sendLoginAlertEmail', 'recaptcha', 'smtp'].includes(key)) {
+      return false;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+    return (
+      Object.prototype.hasOwnProperty.call(value, 'host') ||
+      Object.prototype.hasOwnProperty.call(value, 'port') ||
+      Object.prototype.hasOwnProperty.call(value, 'username') ||
+      Object.prototype.hasOwnProperty.call(value, 'passwordEncrypted') ||
+      Object.prototype.hasOwnProperty.call(value, 'fromEmail') ||
+      Object.prototype.hasOwnProperty.call(value, 'fromName')
+    );
+  });
+
+  return detected?.[1] || {};
+};
+
 const normalizeAuthSecurityInput = (value = {}) => {
   const defaults = cloneAuthSecurityDefaults();
   const source = value && typeof value === 'object' ? value : {};
+  const smtpSource = extractSmtpConfig(source);
 
   const recaptchaEnabled =
     typeof source?.recaptcha?.enabled === 'boolean' ? source.recaptcha.enabled : defaults.recaptcha.enabled;
-  const smtpEnabled = typeof source?.msg91Smtp?.enabled === 'boolean' ? source.msg91Smtp.enabled : defaults.msg91Smtp.enabled;
+  const smtpEnabled = typeof smtpSource?.enabled === 'boolean' ? smtpSource.enabled : defaults.smtp.enabled;
 
   const normalized = {
     sendLoginAlertEmail:
@@ -90,21 +121,21 @@ const normalizeAuthSecurityInput = (value = {}) => {
       secretKeyEncrypted: String(source?.recaptcha?.secretKeyEncrypted || '').trim(),
       updatedAt: source?.recaptcha?.updatedAt || null
     },
-    msg91Smtp: {
+    smtp: {
       enabled: smtpEnabled,
-      host: String(source?.msg91Smtp?.host || defaults.msg91Smtp.host).trim() || defaults.msg91Smtp.host,
-      port: Number(source?.msg91Smtp?.port || defaults.msg91Smtp.port),
-      secure: typeof source?.msg91Smtp?.secure === 'boolean' ? source.msg91Smtp.secure : defaults.msg91Smtp.secure,
-      username: String(source?.msg91Smtp?.username || '').trim(),
-      passwordEncrypted: String(source?.msg91Smtp?.passwordEncrypted || '').trim(),
-      fromEmail: String(source?.msg91Smtp?.fromEmail || '').trim().toLowerCase(),
-      fromName: String(source?.msg91Smtp?.fromName || defaults.msg91Smtp.fromName).trim() || defaults.msg91Smtp.fromName,
-      updatedAt: source?.msg91Smtp?.updatedAt || null
+      host: String(smtpSource?.host || defaults.smtp.host).trim() || defaults.smtp.host,
+      port: Number(smtpSource?.port || defaults.smtp.port),
+      secure: typeof smtpSource?.secure === 'boolean' ? smtpSource.secure : defaults.smtp.secure,
+      username: String(smtpSource?.username || '').trim(),
+      passwordEncrypted: String(smtpSource?.passwordEncrypted || '').trim(),
+      fromEmail: String(smtpSource?.fromEmail || '').trim().toLowerCase(),
+      fromName: String(smtpSource?.fromName || defaults.smtp.fromName).trim() || defaults.smtp.fromName,
+      updatedAt: smtpSource?.updatedAt || null
     }
   };
 
-  if (!Number.isFinite(normalized.msg91Smtp.port) || normalized.msg91Smtp.port < 1 || normalized.msg91Smtp.port > 65535) {
-    normalized.msg91Smtp.port = defaults.msg91Smtp.port;
+  if (!Number.isFinite(normalized.smtp.port) || normalized.smtp.port < 1 || normalized.smtp.port > 65535) {
+    normalized.smtp.port = defaults.smtp.port;
   }
 
   return normalized;
@@ -130,16 +161,16 @@ const normalizeAuthSecurityOutput = (value = {}) => {
       secretKeyConfigured: Boolean(normalized.recaptcha.secretKeyEncrypted),
       updatedAt: normalized.recaptcha.updatedAt || null
     },
-    msg91Smtp: {
-      enabled: Boolean(normalized.msg91Smtp.enabled),
-      host: normalized.msg91Smtp.host,
-      port: normalized.msg91Smtp.port,
-      secure: Boolean(normalized.msg91Smtp.secure),
-      username: normalized.msg91Smtp.username,
-      passwordConfigured: Boolean(normalized.msg91Smtp.passwordEncrypted),
-      fromEmail: normalized.msg91Smtp.fromEmail,
-      fromName: normalized.msg91Smtp.fromName,
-      updatedAt: normalized.msg91Smtp.updatedAt || null
+    smtp: {
+      enabled: Boolean(normalized.smtp.enabled),
+      host: normalized.smtp.host,
+      port: normalized.smtp.port,
+      secure: Boolean(normalized.smtp.secure),
+      username: normalized.smtp.username,
+      passwordConfigured: Boolean(normalized.smtp.passwordEncrypted),
+      fromEmail: normalized.smtp.fromEmail,
+      fromName: normalized.smtp.fromName,
+      updatedAt: normalized.smtp.updatedAt || null
     }
   };
 };
@@ -839,15 +870,20 @@ const applyAuthSecurityUpdates = (currentSettings, payload) => {
     }
   }
 
-  if (Object.prototype.hasOwnProperty.call(source, 'msg91Smtp')) {
-    const smtp = ensureObjectPayload(source.msg91Smtp, 'MSG91 SMTP');
+  const smtpSource = extractSmtpConfig(source);
+  const hasSmtpPayload =
+    (Object.prototype.hasOwnProperty.call(source, 'smtp') && source.smtp !== undefined) ||
+    (smtpSource && Object.keys(smtpSource).length > 0);
+
+  if (hasSmtpPayload) {
+    const smtp = ensureObjectPayload(smtpSource, 'SMTP settings');
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'enabled')) {
-      next.msg91Smtp.enabled = Boolean(smtp.enabled);
+      next.smtp.enabled = Boolean(smtp.enabled);
     }
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'host')) {
-      next.msg91Smtp.host = trimWithLength(smtp.host, 'SMTP host', 180) || defaultAuthSecuritySettings.msg91Smtp.host;
+      next.smtp.host = trimWithLength(smtp.host, 'SMTP host', 180) || defaultAuthSecuritySettings.smtp.host;
     }
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'port')) {
@@ -855,18 +891,18 @@ const applyAuthSecurityUpdates = (currentSettings, payload) => {
       if (!Number.isFinite(port) || port < 1 || port > 65535) {
         throw new Error('SMTP port must be between 1 and 65535');
       }
-      next.msg91Smtp.port = Math.round(port);
+      next.smtp.port = Math.round(port);
     }
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'secure')) {
-      next.msg91Smtp.secure = Boolean(smtp.secure);
+      next.smtp.secure = Boolean(smtp.secure);
     }
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'username')) {
-      next.msg91Smtp.username = trimWithLength(smtp.username, 'SMTP username', 180);
-      if (!next.msg91Smtp.username) {
-        next.msg91Smtp.passwordEncrypted = '';
-        next.msg91Smtp.updatedAt = null;
+      next.smtp.username = trimWithLength(smtp.username, 'SMTP username', 180);
+      if (!next.smtp.username) {
+        next.smtp.passwordEncrypted = '';
+        next.smtp.updatedAt = null;
       }
     }
 
@@ -875,27 +911,27 @@ const applyAuthSecurityUpdates = (currentSettings, payload) => {
       if (fromEmail && !emailPattern.test(fromEmail)) {
         throw new Error('SMTP from email must be a valid email address');
       }
-      next.msg91Smtp.fromEmail = fromEmail;
+      next.smtp.fromEmail = fromEmail;
     }
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'fromName')) {
-      next.msg91Smtp.fromName = trimWithLength(smtp.fromName, 'SMTP from name', 140) || defaultAuthSecuritySettings.msg91Smtp.fromName;
+      next.smtp.fromName = trimWithLength(smtp.fromName, 'SMTP from name', 140) || defaultAuthSecuritySettings.smtp.fromName;
     }
 
     if (Object.prototype.hasOwnProperty.call(smtp, 'password')) {
       const password = String(smtp.password || '').trim();
       if (!password) {
-        next.msg91Smtp.passwordEncrypted = '';
-        next.msg91Smtp.updatedAt = null;
+        next.smtp.passwordEncrypted = '';
+        next.smtp.updatedAt = null;
       } else {
-        if (!next.msg91Smtp.username) {
+        if (!next.smtp.username) {
           throw new Error('SMTP username is required before saving password');
         }
         if (password.length > 300) {
           throw new Error('SMTP password must be 300 characters or less');
         }
-        next.msg91Smtp.passwordEncrypted = encryptSettingValue(password);
-        next.msg91Smtp.updatedAt = now;
+        next.smtp.passwordEncrypted = encryptSettingValue(password);
+        next.smtp.updatedAt = now;
       }
     }
   }

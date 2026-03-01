@@ -26,9 +26,9 @@ const defaultForm = {
     secretKey: '',
     secretKeyConfigured: false
   },
-  msg91Smtp: {
+  smtp: {
     enabled: false,
-    host: 'smtp.msg91.com',
+    host: 'smtp.example.com',
     port: 587,
     secure: false,
     username: '',
@@ -56,16 +56,16 @@ const AdminAuthSecuritySettingsPage = () => {
         secretKey: '',
         secretKeyConfigured: Boolean(authSecurity?.recaptcha?.secretKeyConfigured)
       },
-      msg91Smtp: {
-        enabled: Boolean(authSecurity?.msg91Smtp?.enabled),
-        host: String(authSecurity?.msg91Smtp?.host || 'smtp.msg91.com'),
-        port: Number(authSecurity?.msg91Smtp?.port || 587),
-        secure: Boolean(authSecurity?.msg91Smtp?.secure),
-        username: String(authSecurity?.msg91Smtp?.username || ''),
+      smtp: {
+        enabled: Boolean(authSecurity?.smtp?.enabled),
+        host: String(authSecurity?.smtp?.host || 'smtp.example.com'),
+        port: Number(authSecurity?.smtp?.port || 587),
+        secure: Boolean(authSecurity?.smtp?.secure),
+        username: String(authSecurity?.smtp?.username || ''),
         password: '',
-        passwordConfigured: Boolean(authSecurity?.msg91Smtp?.passwordConfigured),
-        fromEmail: String(authSecurity?.msg91Smtp?.fromEmail || ''),
-        fromName: String(authSecurity?.msg91Smtp?.fromName || 'Humanoid Maker')
+        passwordConfigured: Boolean(authSecurity?.smtp?.passwordConfigured),
+        fromEmail: String(authSecurity?.smtp?.fromEmail || ''),
+        fromName: String(authSecurity?.smtp?.fromName || 'Humanoid Maker')
       }
     });
   };
@@ -110,8 +110,8 @@ const AdminAuthSecuritySettingsPage = () => {
   const setSmtpField = (field, value) => {
     setForm((current) => ({
       ...current,
-      msg91Smtp: {
-        ...current.msg91Smtp,
+      smtp: {
+        ...current.smtp,
         [field]: value
       }
     }));
@@ -131,14 +131,14 @@ const AdminAuthSecuritySettingsPage = () => {
             enabled: Boolean(form.recaptcha.enabled),
             siteKey: String(form.recaptcha.siteKey || '').trim()
           },
-          msg91Smtp: {
-            enabled: Boolean(form.msg91Smtp.enabled),
-            host: String(form.msg91Smtp.host || '').trim(),
-            port: Number(form.msg91Smtp.port || 587),
-            secure: Boolean(form.msg91Smtp.secure),
-            username: String(form.msg91Smtp.username || '').trim(),
-            fromEmail: String(form.msg91Smtp.fromEmail || '').trim(),
-            fromName: String(form.msg91Smtp.fromName || '').trim()
+          smtp: {
+            enabled: Boolean(form.smtp.enabled),
+            host: String(form.smtp.host || '').trim(),
+            port: Number(form.smtp.port || 587),
+            secure: Boolean(form.smtp.secure),
+            username: String(form.smtp.username || '').trim(),
+            fromEmail: String(form.smtp.fromEmail || '').trim(),
+            fromName: String(form.smtp.fromName || '').trim()
           }
         }
       };
@@ -148,9 +148,9 @@ const AdminAuthSecuritySettingsPage = () => {
         payload.authSecurity.recaptcha.secretKey = recaptchaSecret;
       }
 
-      const smtpPassword = String(form.msg91Smtp.password || '').trim();
+      const smtpPassword = String(form.smtp.password || '').trim();
       if (smtpPassword) {
-        payload.authSecurity.msg91Smtp.password = smtpPassword;
+        payload.authSecurity.smtp.password = smtpPassword;
       }
 
       const { data } = await api.put('/settings', payload);
@@ -168,7 +168,7 @@ const AdminAuthSecuritySettingsPage = () => {
       <PageHeader
         eyebrow="Admin"
         title="Auth & Security"
-        subtitle="Configure reCAPTCHA, MSG91 SMTP email notifications and login alerts."
+        subtitle="Configure reCAPTCHA, SMTP email notifications and login alerts."
       />
 
       <Card sx={{ mb: 1.2 }}>
@@ -243,12 +243,12 @@ const AdminAuthSecuritySettingsPage = () => {
               <Divider />
 
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                MSG91 SMTP
+                SMTP
               </Typography>
               <FormControlLabel
                 control={
                   <Switch
-                    checked={form.msg91Smtp.enabled}
+                    checked={form.smtp.enabled}
                     onChange={(event) => setSmtpField('enabled', event.target.checked)}
                   />
                 }
@@ -258,20 +258,20 @@ const AdminAuthSecuritySettingsPage = () => {
               <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' } }}>
                 <TextField
                   label="SMTP Host"
-                  value={form.msg91Smtp.host}
+                  value={form.smtp.host}
                   onChange={(event) => setSmtpField('host', event.target.value)}
                 />
                 <TextField
                   label="SMTP Port"
                   type="number"
-                  value={form.msg91Smtp.port}
+                  value={form.smtp.port}
                   onChange={(event) => setSmtpField('port', event.target.value)}
                 />
                 <FormControlLabel
                   sx={{ alignSelf: 'center' }}
                   control={
                     <Switch
-                      checked={form.msg91Smtp.secure}
+                      checked={form.smtp.secure}
                       onChange={(event) => setSmtpField('secure', event.target.checked)}
                     />
                   }
@@ -279,26 +279,26 @@ const AdminAuthSecuritySettingsPage = () => {
                 />
                 <TextField
                   label="SMTP Username"
-                  value={form.msg91Smtp.username}
+                  value={form.smtp.username}
                   onChange={(event) => setSmtpField('username', event.target.value)}
                 />
                 <TextField
                   label="SMTP Password"
                   type="password"
-                  value={form.msg91Smtp.password}
+                  value={form.smtp.password}
                   onChange={(event) => setSmtpField('password', event.target.value)}
                   autoComplete="new-password"
-                  helperText={form.msg91Smtp.passwordConfigured ? 'Password configured (leave blank to keep).' : 'No password saved.'}
+                  helperText={form.smtp.passwordConfigured ? 'Password configured (leave blank to keep).' : 'No password saved.'}
                 />
                 <TextField
                   label="From Email"
                   type="email"
-                  value={form.msg91Smtp.fromEmail}
+                  value={form.smtp.fromEmail}
                   onChange={(event) => setSmtpField('fromEmail', event.target.value)}
                 />
                 <TextField
                   label="From Name"
-                  value={form.msg91Smtp.fromName}
+                  value={form.smtp.fromName}
                   onChange={(event) => setSmtpField('fromName', event.target.value)}
                 />
               </Box>

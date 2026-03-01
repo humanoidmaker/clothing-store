@@ -17,9 +17,9 @@ const defaultAuthSecuritySettings = StoreSettings.defaultAuthSecuritySettings ||
     siteKey: '',
     secretKeyEncrypted: ''
   },
-  msg91Smtp: {
+  smtp: {
     enabled: false,
-    host: 'smtp.msg91.com',
+    host: 'smtp.example.com',
     port: 587,
     secure: false,
     username: '',
@@ -96,8 +96,39 @@ const normalizeTaxDetails = (value = {}) => {
   return tax;
 };
 
+const extractSmtpConfig = (source = {}) => {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return {};
+  }
+
+  const direct = source.smtp;
+  if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
+    return direct;
+  }
+
+  const detected = Object.entries(source).find(([key, value]) => {
+    if (['sendLoginAlertEmail', 'recaptcha', 'smtp'].includes(key)) {
+      return false;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+    return (
+      Object.prototype.hasOwnProperty.call(value, 'host') ||
+      Object.prototype.hasOwnProperty.call(value, 'port') ||
+      Object.prototype.hasOwnProperty.call(value, 'username') ||
+      Object.prototype.hasOwnProperty.call(value, 'passwordEncrypted') ||
+      Object.prototype.hasOwnProperty.call(value, 'fromEmail') ||
+      Object.prototype.hasOwnProperty.call(value, 'fromName')
+    );
+  });
+
+  return detected?.[1] || {};
+};
+
 const normalizeAuthSecurityConfig = (value = {}) => {
   const source = value && typeof value === 'object' ? value : {};
+  const smtpSource = extractSmtpConfig(source);
   return {
     sendLoginAlertEmail:
       typeof source?.sendLoginAlertEmail === 'boolean'
@@ -111,23 +142,23 @@ const normalizeAuthSecurityConfig = (value = {}) => {
       siteKey: String(source?.recaptcha?.siteKey || '').trim(),
       secretKeyEncrypted: String(source?.recaptcha?.secretKeyEncrypted || '').trim()
     },
-    msg91Smtp: {
+    smtp: {
       enabled:
-        typeof source?.msg91Smtp?.enabled === 'boolean'
-          ? source.msg91Smtp.enabled
-          : defaultAuthSecuritySettings.msg91Smtp.enabled,
-      host: String(source?.msg91Smtp?.host || defaultAuthSecuritySettings.msg91Smtp.host).trim(),
-      port: Number(source?.msg91Smtp?.port || defaultAuthSecuritySettings.msg91Smtp.port),
+        typeof smtpSource?.enabled === 'boolean'
+          ? smtpSource.enabled
+          : defaultAuthSecuritySettings.smtp.enabled,
+      host: String(smtpSource?.host || defaultAuthSecuritySettings.smtp.host).trim(),
+      port: Number(smtpSource?.port || defaultAuthSecuritySettings.smtp.port),
       secure:
-        typeof source?.msg91Smtp?.secure === 'boolean'
-          ? source.msg91Smtp.secure
-          : defaultAuthSecuritySettings.msg91Smtp.secure,
-      username: String(source?.msg91Smtp?.username || '').trim(),
-      passwordEncrypted: String(source?.msg91Smtp?.passwordEncrypted || '').trim(),
-      fromEmail: String(source?.msg91Smtp?.fromEmail || '').trim().toLowerCase(),
+        typeof smtpSource?.secure === 'boolean'
+          ? smtpSource.secure
+          : defaultAuthSecuritySettings.smtp.secure,
+      username: String(smtpSource?.username || '').trim(),
+      passwordEncrypted: String(smtpSource?.passwordEncrypted || '').trim(),
+      fromEmail: String(smtpSource?.fromEmail || '').trim().toLowerCase(),
       fromName:
-        String(source?.msg91Smtp?.fromName || defaultAuthSecuritySettings.msg91Smtp.fromName).trim() ||
-        defaultAuthSecuritySettings.msg91Smtp.fromName
+        String(smtpSource?.fromName || defaultAuthSecuritySettings.smtp.fromName).trim() ||
+        defaultAuthSecuritySettings.smtp.fromName
     }
   };
 };
@@ -206,7 +237,7 @@ const verifyRecaptchaIfNeeded = async (token, authSecurity) => {
 };
 
 const sendSmtpEmail = async (authSecurity, { to, subject, text, html }) => {
-  const smtp = authSecurity?.msg91Smtp || {};
+  const smtp = authSecurity?.smtp || {};
   if (!smtp.enabled) {
     return { skipped: true, reason: 'SMTP disabled' };
   }
@@ -218,7 +249,7 @@ const sendSmtpEmail = async (authSecurity, { to, subject, text, html }) => {
   const fromName = trimOrEmpty(smtp.fromName) || 'Humanoid Maker';
 
   if (!host || !username || !password || !fromEmail) {
-    throw new Error('MSG91 SMTP settings are incomplete in admin settings');
+    throw new Error('SMTP settings are incomplete in admin settings');
   }
 
   const transport = nodemailer.createTransport({
@@ -294,7 +325,7 @@ const registerUser = async (req, res) => {
 
   const user = await User.create({ name: trimOrEmpty(name), email: normalizedEmail, password });
 
-  if (authSecurity?.msg91Smtp?.enabled) {
+  if (authSecurity?.smtp?.enabled) {
     const safeName = trimOrEmpty(name) || 'there';
     const storeLabel = trimOrEmpty(process.env.STORE_NAME || 'Humanoid Maker');
     const subject = `Welcome to ${storeLabel}`;
@@ -366,7 +397,7 @@ const loginUser = async (req, res) => {
   user.lastLoginAt = new Date();
   await user.save();
 
-  if (authSecurity.sendLoginAlertEmail && authSecurity?.msg91Smtp?.enabled) {
+  if (authSecurity.sendLoginAlertEmail && authSecurity?.smtp?.enabled) {
     const subject = 'New login detected';
     const text = `Hi ${user.name}, your account was just logged in at ${new Date().toISOString()}.`;
     const html = `<p>Hi ${user.name},</p><p>Your account was just logged in at ${new Date().toISOString()}.</p>`;
