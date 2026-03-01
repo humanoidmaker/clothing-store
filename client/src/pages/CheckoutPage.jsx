@@ -594,12 +594,6 @@ const CheckoutPage = () => {
               />
               <TextField
                 fullWidth
-                label="Email"
-                value={form.shipping.email}
-                onChange={(event) => updateShipping('email', event.target.value)}
-              />
-              <TextField
-                fullWidth
                 required
                 label="Street Address"
                 value={form.shipping.street}
@@ -667,12 +661,6 @@ const CheckoutPage = () => {
                     label="Billing Phone Number"
                     value={form.billing.phone}
                     onChange={(event) => updateBilling('phone', event.target.value)}
-                  />
-                  <TextField
-                    fullWidth
-                    label="Billing Email"
-                    value={form.billing.email}
-                    onChange={(event) => updateBilling('email', event.target.value)}
                   />
                   <TextField
                     fullWidth
