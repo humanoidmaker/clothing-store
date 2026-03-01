@@ -91,6 +91,15 @@ const userSchema = new mongoose.Schema(
     isAdmin: {
       type: Boolean,
       default: false
+    },
+    isResellerAdmin: {
+      type: Boolean,
+      default: false
+    },
+    resellerId: {
+      type: String,
+      trim: true,
+      default: ''
     }
   },
   {

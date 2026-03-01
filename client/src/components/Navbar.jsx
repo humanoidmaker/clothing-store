@@ -57,7 +57,8 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { storeName } = useStoreSettings();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isResellerAdmin, logout } = useAuth();
+  const canAccessDashboard = isAdmin || isResellerAdmin;
   const { itemsCount: cartItemsCount } = useCart();
   const { itemsCount: wishlistItemsCount } = useWishlist();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -70,9 +71,9 @@ const Navbar = () => {
     ];
     if (user) links.push({ label: 'My Orders', to: '/orders' });
     if (user) links.push({ label: 'My Settings', to: '/settings' });
-    if (isAdmin) links.push({ label: 'Admin', to: '/admin' });
+    if (canAccessDashboard) links.push({ label: 'Admin', to: '/admin' });
     return links;
-  }, [user, isAdmin]);
+  }, [user, canAccessDashboard]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -134,7 +135,7 @@ const Navbar = () => {
                   Settings
                 </Box>
               )}
-              {isAdmin && (
+              {canAccessDashboard && (
                 <Box component={NavLink} to="/admin" sx={navLinkSx}>
                   Admin
                 </Box>

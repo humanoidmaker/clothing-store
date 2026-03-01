@@ -2,6 +2,11 @@ const Product = require('../models/Product');
 const Order = require('../models/Order');
 const StoreSettings = require('../models/StoreSettings');
 const { isDataImageUrl, saveImageDataUrlToStorage } = require('../utils/mediaStorage');
+const {
+  resolveResellerContext,
+  shouldApplyResellerPricing,
+  applyResellerPricingToProduct
+} = require('../utils/resellerPricing');
 
 const defaultImage = 'https://placehold.co/600x400?text=Product';
 const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
@@ -104,11 +109,21 @@ const normalizeReviewRating = (value) => {
   return Math.round(rating);
 };
 
-const getProductSnapshotWithoutHiddenReviews = (product) => {
+const getProductSnapshotWithoutHiddenReviews = (product, resellerId = '') => {
   const source = typeof product?.toObject === 'function' ? product.toObject() : { ...(product || {}) };
   const allReviews = Array.isArray(source.reviews) ? source.reviews : [];
+  const normalizedResellerId = String(resellerId || '').trim();
   source.reviews = allReviews
-    .filter((review) => !review?.isHidden)
+    .filter((review) => {
+      if (review?.isHidden) {
+        return false;
+      }
+      const reviewResellerId = String(review?.resellerId || '').trim();
+      if (normalizedResellerId) {
+        return reviewResellerId === normalizedResellerId;
+      }
+      return !reviewResellerId;
+    })
     .sort((left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime())
     .map((review) => ({
       _id: review._id,
@@ -118,6 +133,10 @@ const getProductSnapshotWithoutHiddenReviews = (product) => {
       createdAt: review?.createdAt || null,
       updatedAt: review?.updatedAt || null
     }));
+  const visibleReviews = source.reviews;
+  const visibleRatingsTotal = visibleReviews.reduce((sum, review) => sum + Number(review?.rating || 0), 0);
+  source.numReviews = visibleReviews.length;
+  source.rating = visibleReviews.length > 0 ? Number((visibleRatingsTotal / visibleReviews.length).toFixed(1)) : 0;
   return source;
 };
 
@@ -131,7 +150,22 @@ const recalculateProductRating = (product) => {
   product.rating = count > 0 ? Number((total / count).toFixed(1)) : 0;
 };
 
-const buildReviewPolicy = async (product, user) => {
+const buildReviewOrderScope = (resellerId = '') => {
+  const normalizedResellerId = String(resellerId || '').trim();
+  if (normalizedResellerId) {
+    return { resellerId: normalizedResellerId };
+  }
+
+  return {
+    $or: [
+      { resellerId: { $exists: false } },
+      { resellerId: '' },
+      { resellerId: null }
+    ]
+  };
+};
+
+const buildReviewPolicy = async (product, user, resellerId = '') => {
   const policy = {
     isAuthenticated: Boolean(user?._id),
     hasPurchased: false,
@@ -153,7 +187,12 @@ const buildReviewPolicy = async (product, user) => {
 
   const userId = String(user._id);
   const reviews = Array.isArray(product?.reviews) ? product.reviews : [];
-  const alreadyReviewed = reviews.some((review) => String(review?.user || '') === userId);
+  const normalizedResellerId = String(resellerId || '').trim();
+  const alreadyReviewed = reviews.some(
+    (review) =>
+      String(review?.user || '') === userId &&
+      String(review?.resellerId || '').trim() === normalizedResellerId
+  );
   if (alreadyReviewed) {
     return {
       ...policy,
@@ -165,6 +204,7 @@ const buildReviewPolicy = async (product, user) => {
   const purchased = await Order.exists({
     user: user._id,
     status: { $in: REVIEW_ELIGIBLE_ORDER_STATUSES },
+    ...buildReviewOrderScope(resellerId),
     orderItems: {
       $elemMatch: {
         product: product._id
@@ -323,6 +363,32 @@ const sortValues = (values) =>
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
+const buildSortComparator = (sort) => {
+  if (sort === 'price_asc') {
+    return (left, right) => Number(left?.price || 0) - Number(right?.price || 0);
+  }
+
+  if (sort === 'price_desc') {
+    return (left, right) => Number(right?.price || 0) - Number(left?.price || 0);
+  }
+
+  if (sort === 'rating') {
+    return (left, right) => {
+      const ratingDiff = Number(right?.rating || 0) - Number(left?.rating || 0);
+      if (ratingDiff !== 0) {
+        return ratingDiff;
+      }
+      const reviewsDiff = Number(right?.numReviews || 0) - Number(left?.numReviews || 0);
+      if (reviewsDiff !== 0) {
+        return reviewsDiff;
+      }
+      return new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime();
+    };
+  }
+
+  return (left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime();
+};
+
 const persistImageIfNeeded = async (value) => {
   const normalized = String(value || '').trim();
   if (!normalized) {
@@ -427,6 +493,8 @@ const getProducts = async (req, res) => {
   }
 
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
+  const resellerContext = await resolveResellerContext(req);
+  const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
 
   const effectiveStockExpr = buildEffectiveStockExpression();
 
@@ -445,17 +513,19 @@ const getProducts = async (req, res) => {
     }
   }
 
-  if (minPrice || maxPrice) {
-    const minPriceNum = Number(minPrice);
-    const maxPriceNum = Number(maxPrice);
+  const minPriceNum = Number(minPrice);
+  const maxPriceNum = Number(maxPrice);
+  const hasMinPrice = minPrice !== undefined && minPrice !== '' && !Number.isNaN(minPriceNum);
+  const hasMaxPrice = maxPrice !== undefined && maxPrice !== '' && !Number.isNaN(maxPriceNum);
 
+  if ((hasMinPrice || hasMaxPrice) && !applyResellerPriceAdjustments) {
     filters.price = {};
 
-    if (minPrice !== undefined && minPrice !== '' && !Number.isNaN(minPriceNum)) {
+    if (hasMinPrice) {
       filters.price.$gte = minPriceNum;
     }
 
-    if (maxPrice !== undefined && maxPrice !== '' && !Number.isNaN(maxPriceNum)) {
+    if (hasMaxPrice) {
       filters.price.$lte = maxPriceNum;
     }
 
@@ -475,6 +545,48 @@ const getProducts = async (req, res) => {
   const parsedLimit = Number.parseInt(limitQuery, 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 12;
+
+  if (applyResellerPriceAdjustments) {
+    const products = await Product.find(filters).sort({ createdAt: -1 });
+    let visibleProducts = products.map((product) => {
+      const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
+      const pricedProduct = applyResellerPricingToProduct(visibleProduct, resellerContext.reseller);
+      const source = typeof pricedProduct?.toObject === 'function' ? pricedProduct.toObject() : { ...pricedProduct };
+      delete source.reviews;
+      return source;
+    });
+
+    if (hasMinPrice || hasMaxPrice) {
+      visibleProducts = visibleProducts.filter((product) => {
+        const productPrice = Number(product?.price || 0);
+        if (hasMinPrice && productPrice < minPriceNum) {
+          return false;
+        }
+        if (hasMaxPrice && productPrice > maxPriceNum) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    visibleProducts.sort(buildSortComparator(sort));
+
+    const totalItems = visibleProducts.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+    const currentPage = Math.min(page, totalPages);
+    const skip = (currentPage - 1) * limit;
+    const paginatedProducts = visibleProducts.slice(skip, skip + limit);
+
+    return res.json({
+      products: paginatedProducts,
+      page: currentPage,
+      limit,
+      totalItems,
+      totalPages,
+      hasNextPage: currentPage < totalPages,
+      hasPrevPage: currentPage > 1
+    });
+  }
 
   const totalItems = await Product.countDocuments(filters);
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
@@ -506,6 +618,60 @@ const getProducts = async (req, res) => {
 const getProductFilterOptions = async (req, res) => {
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
   const visibilityFilters = includeOutOfStockProducts ? {} : { $expr: { $gt: [buildEffectiveStockExpression(), 0] } };
+  const resellerContext = await resolveResellerContext(req);
+  const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
+
+  if (applyResellerPriceAdjustments) {
+    const products = await Product.find(visibilityFilters).sort({ createdAt: -1 });
+    const categories = new Set();
+    const genders = new Set();
+    const sizes = new Set();
+    const colors = new Set();
+    const brands = new Set();
+    const materials = new Set();
+    const fits = new Set();
+
+    let minPrice = Number.POSITIVE_INFINITY;
+    let maxPrice = 0;
+
+    for (const product of products) {
+      const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
+      const pricedProduct = applyResellerPricingToProduct(visibleProduct, resellerContext.reseller);
+
+      categories.add(String(pricedProduct?.category || '').trim());
+      genders.add(String(pricedProduct?.gender || '').trim());
+      brands.add(String(pricedProduct?.brand || '').trim());
+      materials.add(String(pricedProduct?.material || '').trim());
+      fits.add(String(pricedProduct?.fit || '').trim());
+
+      const productSizes = Array.isArray(pricedProduct?.sizes) ? pricedProduct.sizes : [];
+      const productColors = Array.isArray(pricedProduct?.colors) ? pricedProduct.colors : [];
+      for (const size of productSizes) {
+        sizes.add(String(size || '').trim());
+      }
+      for (const color of productColors) {
+        colors.add(String(color || '').trim());
+      }
+
+      const priceValue = Number(pricedProduct?.price || 0);
+      if (Number.isFinite(priceValue) && priceValue >= 0) {
+        minPrice = Math.min(minPrice, priceValue);
+        maxPrice = Math.max(maxPrice, priceValue);
+      }
+    }
+
+    return res.json({
+      categories: sortValues(Array.from(categories)),
+      genders: sortValues(Array.from(genders)),
+      sizes: sortValues(Array.from(sizes)),
+      colors: sortValues(Array.from(colors)),
+      brands: sortValues(Array.from(brands)),
+      materials: sortValues(Array.from(materials)),
+      fits: sortValues(Array.from(fits)),
+      minPrice: Number.isFinite(minPrice) ? minPrice : 0,
+      maxPrice: Number.isFinite(maxPrice) ? maxPrice : 0
+    });
+  }
 
   const [categories, genders, sizes, colors, brands, materials, fits, priceStats] = await Promise.all([
     Product.distinct('category', visibilityFilters),
@@ -554,9 +720,15 @@ const getProductById = async (req, res) => {
     return res.status(404).json({ message: 'Product not found' });
   }
 
+  const resellerContext = await resolveResellerContext(req);
+  const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
   const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
-  const productWithPublicReviews = getProductSnapshotWithoutHiddenReviews(visibleProduct);
-  productWithPublicReviews.reviewPolicy = await buildReviewPolicy(product, req.user || null);
+  const pricedProduct = applyResellerPriceAdjustments
+    ? applyResellerPricingToProduct(visibleProduct, resellerContext.reseller)
+    : visibleProduct;
+  const reviewResellerId = applyResellerPriceAdjustments ? String(resellerContext?.reseller?.id || '').trim() : '';
+  const productWithPublicReviews = getProductSnapshotWithoutHiddenReviews(pricedProduct, reviewResellerId);
+  productWithPublicReviews.reviewPolicy = await buildReviewPolicy(product, req.user || null, reviewResellerId);
   return res.json(productWithPublicReviews);
 };
 
@@ -566,7 +738,14 @@ const createProductReview = async (req, res) => {
     return res.status(404).json({ message: 'Product not found' });
   }
 
-  const reviewPolicy = await buildReviewPolicy(product, req.user);
+  const resellerContext = await resolveResellerContext(req);
+  const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
+  const reviewResellerId = applyResellerPriceAdjustments ? String(resellerContext?.reseller?.id || '').trim() : '';
+  const reviewResellerName = applyResellerPriceAdjustments
+    ? String(resellerContext?.reseller?.websiteName || resellerContext?.reseller?.name || '').trim()
+    : '';
+
+  const reviewPolicy = await buildReviewPolicy(product, req.user, reviewResellerId);
   if (!reviewPolicy.canSubmit) {
     if (reviewPolicy.reason === 'already_reviewed') {
       return res.status(409).json({ message: 'You have already reviewed this product' });
@@ -587,7 +766,9 @@ const createProductReview = async (req, res) => {
     user: req.user._id,
     name: String(req.user?.name || '').trim() || 'Verified Customer',
     rating,
-    comment
+    comment,
+    resellerId: reviewResellerId,
+    resellerName: reviewResellerName
   });
 
   recalculateProductRating(product);
@@ -611,7 +792,11 @@ const createProductReview = async (req, res) => {
   });
 };
 
-const getAdminProductReviews = async (_req, res) => {
+const getAdminProductReviews = async (req, res) => {
+  const resellerScopeId =
+    !req.user?.isAdmin && req.user?.isResellerAdmin
+      ? String(req.user?.resellerId || '').trim()
+      : '';
   const products = await Product.find({ 'reviews.0': { $exists: true } }).select('name image reviews');
   const flattened = [];
 
@@ -621,12 +806,19 @@ const getAdminProductReviews = async (_req, res) => {
     const reviews = Array.isArray(product?.reviews) ? product.reviews : [];
 
     for (const review of reviews) {
+      const reviewResellerId = String(review?.resellerId || '').trim();
+      if (resellerScopeId && reviewResellerId !== resellerScopeId) {
+        continue;
+      }
+
       flattened.push({
         productId: String(product._id),
         productName,
         productImage,
         reviewId: String(review._id),
         userId: String(review?.user || ''),
+        resellerId: reviewResellerId,
+        resellerName: String(review?.resellerName || '').trim(),
         name: String(review?.name || '').trim() || 'Verified Customer',
         rating: Number(review?.rating || 0),
         comment: String(review?.comment || '').trim(),
@@ -655,6 +847,14 @@ const setProductReviewVisibility = async (req, res) => {
   const review = product.reviews.id(req.params.reviewId);
   if (!review) {
     return res.status(404).json({ message: 'Review not found' });
+  }
+
+  if (!req.user?.isAdmin && req.user?.isResellerAdmin) {
+    const requesterResellerId = String(req.user?.resellerId || '').trim();
+    const reviewResellerId = String(review?.resellerId || '').trim();
+    if (!requesterResellerId || reviewResellerId !== requesterResellerId) {
+      return res.status(404).json({ message: 'Review not found' });
+    }
   }
 
   const shouldHide = Boolean(req.body.hidden);

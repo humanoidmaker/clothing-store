@@ -10,6 +10,7 @@ const {
   createHotlinkProtection,
   setAssetHeaders
 } = require('./server/src/middleware/assetProtection');
+const { startResellerDevProxyManager } = require('./server/src/utils/resellerDevProxyManager');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, 'server/.env') });
@@ -79,10 +80,31 @@ nextApp.prepare().then(() => {
 
   app.all('*', (req, res) => handle(req, res));
 
-  app.listen(port, hostname, () => {
+  const httpServer = app.listen(port, hostname, () => {
     console.log(`Next.js server running at http://${browserHost}:${port}`);
     if (browserHost !== hostname) {
       console.log(`Bound on ${hostname}:${port} for network access`);
     }
   });
+
+  const enableResellerDevPorts =
+    dev && String(process.env.ENABLE_RESELLER_DEV_PORTS || 'true').trim().toLowerCase() !== 'false';
+  const resellerDevProxyManager = startResellerDevProxyManager({
+    targetHost: '127.0.0.1',
+    targetPort: port,
+    enabled: enableResellerDevPorts
+  });
+
+  const shutdown = async (signal) => {
+    try {
+      await resellerDevProxyManager.stop();
+    } catch {
+      // ignore shutdown proxy cleanup errors
+    }
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 });

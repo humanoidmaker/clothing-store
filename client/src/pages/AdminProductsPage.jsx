@@ -37,8 +37,10 @@ import HtmlEditorField from '../components/HtmlEditorField';
 import MediaLibraryDialog from '../components/MediaLibraryDialog';
 import ProductImageViewport from '../components/ProductImageViewport';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { formatINR } from '../utils/currency';
+import ResellerProductPricingPage from './ResellerProductPricingPage';
 
 const defaultCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
 const defaultGenderOptions = ['Men', 'Women', 'Unisex'];
@@ -295,7 +297,7 @@ const readValidatedImages = async (files, profileKey = 'product') => {
   return validated;
 };
 
-const AdminProductsPage = () => {
+const AdminProductsCatalogPage = () => {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
   const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
@@ -1194,6 +1196,14 @@ const AdminProductsPage = () => {
       />
     </Box>
   );
+};
+
+const AdminProductsPage = () => {
+  const { isAdmin, isResellerAdmin } = useAuth();
+  if (isResellerAdmin && !isAdmin) {
+    return <ResellerProductPricingPage />;
+  }
+  return <AdminProductsCatalogPage />;
 };
 
 export default AdminProductsPage;

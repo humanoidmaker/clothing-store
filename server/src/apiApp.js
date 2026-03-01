@@ -10,6 +10,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const seoRoutes = require('./routes/seoRoutes');
 const mediaRoutes = require('./routes/mediaRoutes');
+const resellerRoutes = require('./routes/resellerRoutes');
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -35,6 +36,7 @@ apiApp.use('/orders', orderRoutes);
 apiApp.use('/settings', settingsRoutes);
 apiApp.use('/seo', seoRoutes);
 apiApp.use('/media', mediaRoutes);
+apiApp.use('/resellers', resellerRoutes);
 
 apiApp.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });

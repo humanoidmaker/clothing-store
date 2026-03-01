@@ -3,12 +3,30 @@
 const CartContext = createContext(null);
 const fallbackImage = 'https://placehold.co/600x400?text=Product';
 
+const normalizeImageUrl = (value) => {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (value && typeof value === 'object') {
+    return String(value.url || value.src || '').trim();
+  }
+  return '';
+};
+
 const parseCart = () => {
   const raw = localStorage.getItem('cart');
   if (!raw) return [];
 
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((item) => ({
+      ...item,
+      image: normalizeImageUrl(item?.image) || fallbackImage
+    }));
   } catch {
     localStorage.removeItem('cart');
     return [];
@@ -33,13 +51,19 @@ const findVariant = (product, selectedSize, selectedColor) => {
 
 const getFirstImage = (images) => {
   if (!Array.isArray(images)) return '';
-  return images.find(Boolean) || '';
+  for (const image of images) {
+    const normalized = normalizeImageUrl(image);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return '';
 };
 
 const resolveCartImage = (product, selectedVariant) => {
   const variantImage = getFirstImage(selectedVariant?.images);
   const productImage = getFirstImage(product?.images);
-  return variantImage || productImage || product?.image || fallbackImage;
+  return variantImage || productImage || normalizeImageUrl(product?.image) || fallbackImage;
 };
 
 export const CartProvider = ({ children }) => {

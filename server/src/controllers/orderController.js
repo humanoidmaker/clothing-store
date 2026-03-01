@@ -5,6 +5,12 @@ const Product = require('../models/Product');
 const StoreSettings = require('../models/StoreSettings');
 const User = require('../models/User');
 const { decryptSettingValue } = require('../utils/secureSettings');
+const {
+  resolveResellerContext,
+  shouldApplyResellerPricing,
+  getProductMarginPercent,
+  applyMarginToAmount
+} = require('../utils/resellerPricing');
 
 const ORDER_STATUSES = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
 const PROFIT_STATUSES = ['paid', 'shipped', 'delivered'];
@@ -46,6 +52,14 @@ const PAYMENT_METHOD_LABELS = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const trimOrEmpty = (value) => String(value || '').trim();
+const getUserResellerId = (user) => trimOrEmpty(user?.resellerId || '');
+const isResellerScopedUser = (user) => !Boolean(user?.isAdmin) && Boolean(user?.isResellerAdmin) && Boolean(getUserResellerId(user));
+const buildOrderScopeQuery = (user) => {
+  if (isResellerScopedUser(user)) {
+    return { resellerId: getUserResellerId(user) };
+  }
+  return {};
+};
 
 const normalizeAddressInput = (address = {}, fallback = {}) => ({
   fullName: trimOrEmpty(address.fullName || fallback.fullName || ''),
@@ -227,10 +241,12 @@ const getTrendBucket = (dateValue, interval) => {
   };
 };
 
-const prepareOrderItems = async (items) => {
+const prepareOrderItems = async (items, resellerContext = null) => {
   if (!Array.isArray(items) || items.length === 0) {
     return { error: { status: 400, message: 'Order items are required' } };
   }
+
+  const reseller = resellerContext?.reseller || null;
 
   const orderItems = [];
   const stockUpdates = [];
@@ -296,6 +312,11 @@ const prepareOrderItems = async (items) => {
       if (!selectedColor && variant.color) {
         selectedColor = variant.color;
       }
+    }
+
+    if (reseller) {
+      const marginPercent = getProductMarginPercent(reseller, product._id);
+      unitPrice = applyMarginToAmount(unitPrice, marginPercent);
     }
 
     if (availableStock < quantity) {
@@ -385,6 +406,8 @@ const deductStock = async (stockUpdates) => {
 const createStoredOrder = async ({
   userId,
   items,
+  preparedOrder = null,
+  resellerContext = null,
   shippingAddress,
   billingDetails,
   taxDetails,
@@ -394,7 +417,7 @@ const createStoredOrder = async ({
   paidAt,
   paymentResult
 }) => {
-  const prepared = await prepareOrderItems(items);
+  const prepared = preparedOrder || (await prepareOrderItems(items, resellerContext));
   if (prepared.error) {
     return { error: prepared.error };
   }
@@ -408,6 +431,7 @@ const createStoredOrder = async ({
   const normalizedCodCharge = Number.isFinite(Number(codCharge)) ? Math.max(0, Number(codCharge)) : 0;
   const itemsTotal = Number(prepared.totalPrice || 0);
   const finalTotal = Number((itemsTotal + normalizedCodCharge).toFixed(2));
+  const reseller = resellerContext?.reseller || null;
 
   const order = await Order.create({
     user: userId,
@@ -422,6 +446,9 @@ const createStoredOrder = async ({
       codCharge: normalizedCodCharge,
       finalTotal
     },
+    resellerId: trimOrEmpty(reseller?.id || ''),
+    resellerName: trimOrEmpty(reseller?.websiteName || reseller?.name || ''),
+    resellerDomain: trimOrEmpty(reseller?.primaryDomain || ''),
     status,
     paidAt,
     paymentResult
@@ -533,6 +560,8 @@ const getRazorpayClient = async () => {
 
 const createOrder = async (req, res) => {
   const { items, paymentMethod } = req.body;
+  const resellerContext = await resolveResellerContext(req);
+  const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
   let checkoutDetails;
   try {
     checkoutDetails = normalizeCheckoutDetails(req.body || {}, req.user || {});
@@ -540,14 +569,15 @@ const createOrder = async (req, res) => {
     return res.status(400).json({ message: error.message || 'Invalid checkout details' });
   }
 
+  const prepared = await prepareOrderItems(items, effectiveResellerContext);
+  if (prepared.error) {
+    return res.status(prepared.error.status).json({ message: prepared.error.message });
+  }
+
   const resolvedGateway = normalizeGatewayId(paymentMethod || 'cash_on_delivery');
   let codCharge = 0;
   if (resolvedGateway === 'cash_on_delivery') {
-    const preparedForCod = await prepareOrderItems(items);
-    if (preparedForCod.error) {
-      return res.status(preparedForCod.error.status).json({ message: preparedForCod.error.message });
-    }
-    codCharge = computeCodCharge(preparedForCod);
+    codCharge = computeCodCharge(prepared);
     if (codCharge > 0 && !checkoutDetails.codChargesAccepted) {
       return res.status(400).json({
         message: `Please confirm Cash on Delivery convenience charges of INR ${codCharge}`
@@ -558,6 +588,8 @@ const createOrder = async (req, res) => {
   const saved = await createStoredOrder({
     userId: req.user._id,
     items,
+    preparedOrder: prepared,
+    resellerContext: effectiveResellerContext,
     shippingAddress: checkoutDetails.shippingAddress,
     billingDetails: checkoutDetails.billingDetails,
     taxDetails: checkoutDetails.taxDetails,
@@ -624,12 +656,14 @@ const createManualInvoice = async (req, res) => {
 const createRazorpayOrder = async (req, res) => {
   const { items } = req.body;
   const razorpay = await getRazorpayClient();
+  const resellerContext = await resolveResellerContext(req);
+  const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
 
   if (razorpay.error) {
     return res.status(razorpay.error.status).json({ message: razorpay.error.message });
   }
 
-  const prepared = await prepareOrderItems(items);
+  const prepared = await prepareOrderItems(items, effectiveResellerContext);
   if (prepared.error) {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
@@ -663,6 +697,8 @@ const createRazorpayOrder = async (req, res) => {
 const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
   const { items, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
   const razorpay = await getRazorpayClient();
+  const resellerContext = await resolveResellerContext(req);
+  const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
 
   if (razorpay.error) {
     return res.status(razorpay.error.status).json({ message: razorpay.error.message });
@@ -695,7 +731,7 @@ const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
     return res.status(409).json({ message: 'This payment is already processed' });
   }
 
-  const prepared = await prepareOrderItems(items);
+  const prepared = await prepareOrderItems(items, effectiveResellerContext);
   if (prepared.error) {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
@@ -722,6 +758,8 @@ const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
   const saved = await createStoredOrder({
     userId: req.user._id,
     items,
+    preparedOrder: prepared,
+    resellerContext: effectiveResellerContext,
     shippingAddress: checkoutDetails.shippingAddress,
     billingDetails: checkoutDetails.billingDetails,
     taxDetails: checkoutDetails.taxDetails,
@@ -1022,6 +1060,8 @@ const getPaymentGatewayOptions = async (req, res) => {
 const createPaymentIntent = async (req, res) => {
   const gateway = normalizeGatewayId(req.body?.gateway);
   const { items } = req.body;
+  const resellerContext = await resolveResellerContext(req);
+  const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
 
   if (!gateway) {
     return res.status(400).json({ message: 'Payment gateway is required' });
@@ -1033,7 +1073,7 @@ const createPaymentIntent = async (req, res) => {
     return res.status(400).json({ message: error.message || 'Invalid checkout details' });
   }
 
-  const prepared = await prepareOrderItems(items);
+  const prepared = await prepareOrderItems(items, effectiveResellerContext);
   if (prepared.error) {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
@@ -1063,6 +1103,8 @@ const createPaymentIntent = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1364,6 +1406,8 @@ const createPaymentIntent = async (req, res) => {
 const verifyPaymentAndCreateOrder = async (req, res) => {
   const gateway = normalizeGatewayId(req.body?.gateway);
   const { items } = req.body;
+  const resellerContext = await resolveResellerContext(req);
+  const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
 
   if (!gateway) {
     return res.status(400).json({ message: 'Payment gateway is required' });
@@ -1375,7 +1419,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     return res.status(400).json({ message: error.message || 'Invalid checkout details' });
   }
 
-  const prepared = await prepareOrderItems(items);
+  const prepared = await prepareOrderItems(items, effectiveResellerContext);
   if (prepared.error) {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
@@ -1430,6 +1474,8 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1474,6 +1520,8 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1540,6 +1588,8 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1604,6 +1654,8 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1656,6 +1708,8 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1716,6 +1770,8 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
+      preparedOrder: prepared,
+      resellerContext: effectiveResellerContext,
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
@@ -1774,7 +1830,8 @@ const getMyOrderById = async (req, res) => {
 };
 
 const getAllOrders = async (req, res) => {
-  const orders = await Order.find({})
+  const scopeQuery = buildOrderScopeQuery(req.user || {});
+  const orders = await Order.find(scopeQuery)
     .populate('user', 'name email')
     .sort({ createdAt: -1 });
 
@@ -1795,7 +1852,11 @@ const updateOrderStatus = async (req, res) => {
     });
   }
 
-  const order = await Order.findById(req.params.id);
+  const scopeQuery = buildOrderScopeQuery(req.user || {});
+  const order = await Order.findOne({
+    _id: req.params.id,
+    ...scopeQuery
+  });
   if (!order) {
     return res.status(404).json({ message: 'Order not found' });
   }
@@ -1860,6 +1921,8 @@ const getOrderReports = async (req, res) => {
       query.createdAt.$lte = toDate;
     }
   }
+
+  Object.assign(query, buildOrderScopeQuery(req.user || {}));
 
   const orders = await Order.find(query).select('status totalPrice createdAt paymentMethod orderItems');
   const fallbackProductIds = new Set();

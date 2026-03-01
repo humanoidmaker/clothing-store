@@ -1,6 +1,12 @@
 const Product = require('../models/Product');
 const SeoSettings = require('../models/SeoSettings');
 const {
+  getResellerSeoById,
+  updateResellerSeoDefaultsById,
+  upsertResellerPublicPageSeoById,
+  deleteResellerPublicPageSeoById
+} = require('../utils/resellerStore');
+const {
   sanitizeSeoMeta,
   normalizeSeoKey,
   normalizePath,
@@ -46,12 +52,57 @@ const buildSeoSettingsResponse = (settings) => ({
   publicPages: mergePublicPages(settings.publicPages || [])
 });
 
+const isResellerSession = (req) =>
+  !Boolean(req.user?.isAdmin) &&
+  Boolean(req.user?.isResellerAdmin) &&
+  Boolean(String(req.user?.resellerId || '').trim());
+
+const buildResellerSeoResponse = (resellerSeoState) => ({
+  defaults: sanitizeSeoMeta(resellerSeoState?.seo?.defaults || {}),
+  publicPages: Array.isArray(resellerSeoState?.seo?.publicPages)
+    ? resellerSeoState.seo.publicPages.map((page) => ({
+        key: normalizeSeoKey(page?.key),
+        label: String(page?.label || '').trim().slice(0, 80),
+        path: normalizePath(page?.path),
+        meta: sanitizeSeoMeta(page?.meta || {})
+      }))
+    : []
+});
+
+const getResellerSeoStateOrThrow = async (resellerId) => {
+  const state = await getResellerSeoById(resellerId);
+  if (!state) {
+    throw new Error('Reseller not found');
+  }
+  return state;
+};
+
 const getSeoAdminData = async (req, res) => {
+  if (isResellerSession(req)) {
+    try {
+      const state = await getResellerSeoStateOrThrow(req.user.resellerId);
+      return res.json(buildResellerSeoResponse(state));
+    } catch (error) {
+      const status = String(error.message || '').toLowerCase().includes('not found') ? 404 : 400;
+      return res.status(status).json({ message: error.message || 'Failed to load reseller SEO settings' });
+    }
+  }
+
   const settings = await ensureSeoSettings();
   return res.json(buildSeoSettingsResponse(settings));
 };
 
 const updateSeoDefaults = async (req, res) => {
+  if (isResellerSession(req)) {
+    try {
+      const state = await updateResellerSeoDefaultsById(req.user.resellerId, req.body?.meta || {});
+      return res.json(buildResellerSeoResponse(state));
+    } catch (error) {
+      const status = String(error.message || '').toLowerCase().includes('not found') ? 404 : 400;
+      return res.status(status).json({ message: error.message || 'Failed to update reseller default SEO settings' });
+    }
+  }
+
   const settings = await ensureSeoSettings();
   settings.defaults = sanitizeSeoMeta(req.body?.meta || {});
   await settings.save();
@@ -71,6 +122,21 @@ const upsertPublicPageSeo = async (req, res) => {
   }
   if (!path) {
     return res.status(400).json({ message: 'Page path is required' });
+  }
+
+  if (isResellerSession(req)) {
+    try {
+      const state = await upsertResellerPublicPageSeoById(req.user.resellerId, {
+        key,
+        label,
+        path,
+        meta: req.body?.meta || {}
+      });
+      return res.json(buildResellerSeoResponse(state));
+    } catch (error) {
+      const status = String(error.message || '').toLowerCase().includes('not found') ? 404 : 400;
+      return res.status(status).json({ message: error.message || 'Failed to update reseller page SEO settings' });
+    }
   }
 
   const settings = await ensureSeoSettings();
@@ -105,6 +171,17 @@ const deletePublicPageSeo = async (req, res) => {
   const key = normalizeSeoKey(req.params.key);
   if (!key) {
     return res.status(400).json({ message: 'Page key is required' });
+  }
+
+  if (isResellerSession(req)) {
+    try {
+      const state = await deleteResellerPublicPageSeoById(req.user.resellerId, key);
+      return res.json(buildResellerSeoResponse(state));
+    } catch (error) {
+      const normalized = String(error.message || '').toLowerCase();
+      const status = normalized.includes('not found') ? 404 : 400;
+      return res.status(status).json({ message: error.message || 'Failed to delete reseller page SEO settings' });
+    }
   }
 
   const settings = await ensureSeoSettings();

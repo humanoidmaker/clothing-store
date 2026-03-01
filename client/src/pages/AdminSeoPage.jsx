@@ -20,6 +20,7 @@ import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import MediaLibraryDialog from '../components/MediaLibraryDialog';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const DEFAULT_SEO_META = {
   title: '',
@@ -250,6 +251,8 @@ const createSeoFields = ({ title, value, onChange, onPickImage }) => (
 );
 
 const AdminSeoPage = () => {
+  const { isAdmin } = useAuth();
+  const canManageProductSeo = isAdmin;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -281,16 +284,21 @@ const AdminSeoPage = () => {
     setError('');
 
     try {
-      const [seoResponse, productsResponse] = await Promise.all([
-        api.get('/seo/admin'),
-        api.get('/seo/products')
-      ]);
+      const seoResponse = await api.get('/seo/admin');
+      let nextProducts = [];
+      if (canManageProductSeo) {
+        try {
+          const productsResponse = await api.get('/seo/products');
+          nextProducts = Array.isArray(productsResponse.data) ? productsResponse.data : [];
+        } catch (productsError) {
+          throw productsError;
+        }
+      }
 
       const nextDefaults = normalizeMeta(seoResponse.data?.defaults || {});
       const nextPages = Array.isArray(seoResponse.data?.publicPages)
         ? seoResponse.data.publicPages
         : [];
-      const nextProducts = Array.isArray(productsResponse.data) ? productsResponse.data : [];
 
       setDefaultsDraft(nextDefaults);
       setPublicPages(nextPages);
@@ -497,6 +505,10 @@ const AdminSeoPage = () => {
   };
 
   const onLoadProductSeo = async (productId) => {
+    if (!canManageProductSeo) {
+      return;
+    }
+
     setSelectedProductId(productId);
     setSelectedProductInfo(null);
     setProductSeoDraft(normalizeMeta(defaultsDraft));
@@ -520,6 +532,10 @@ const AdminSeoPage = () => {
   };
 
   const onSaveProductSeo = async () => {
+    if (!canManageProductSeo) {
+      return;
+    }
+
     if (!selectedProductId) {
       setError('Select a product first');
       return;
@@ -687,61 +703,63 @@ const AdminSeoPage = () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent sx={{ p: 1 }}>
-            <Stack spacing={1}>
-              <Typography variant="h6">Product Page SEO</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Configure SEO for each `/products/:id` page.
-              </Typography>
+        {canManageProductSeo ? (
+          <Card>
+            <CardContent sx={{ p: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="h6">Product Page SEO</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Configure SEO for each `/products/:id` page.
+                </Typography>
 
-              <TextField
-                select
-                size="small"
-                label="Select Product"
-                value={selectedProductId}
-                onChange={(event) => onLoadProductSeo(event.target.value)}
-              >
-                <MenuItem value="">Choose a product</MenuItem>
-                {products.map((product) => (
-                  <MenuItem key={product._id} value={product._id}>
-                    {product.name} ({product.category})
-                  </MenuItem>
-                ))}
-              </TextField>
+                <TextField
+                  select
+                  size="small"
+                  label="Select Product"
+                  value={selectedProductId}
+                  onChange={(event) => onLoadProductSeo(event.target.value)}
+                >
+                  <MenuItem value="">Choose a product</MenuItem>
+                  {products.map((product) => (
+                    <MenuItem key={product._id} value={product._id}>
+                      {product.name} ({product.category})
+                    </MenuItem>
+                  ))}
+                </TextField>
 
-              {loadingProductSeo ? (
-                <Stack alignItems="center" sx={{ py: 2 }}>
-                  <CircularProgress size={24} />
-                </Stack>
-              ) : null}
-
-              {!loadingProductSeo && selectedProductInfo ? (
-                <>
-                  <Alert severity="info">
-                    Editing SEO for <strong>{selectedProductInfo.name}</strong>
-                  </Alert>
-                  {createSeoFields({
-                    title: 'Product Meta & Social Tags',
-                    value: productSeoDraft,
-                    onChange: onChangeProductMeta,
-                    onPickImage: (field, altField) => openMediaDialogFor('product', field, altField)
-                  })}
-                  <Stack direction="row" spacing={0.8}>
-                    <Button
-                      variant="contained"
-                      startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon />}
-                      disabled={saving || !selectedProductId}
-                      onClick={onSaveProductSeo}
-                    >
-                      Save Product SEO
-                    </Button>
+                {loadingProductSeo ? (
+                  <Stack alignItems="center" sx={{ py: 2 }}>
+                    <CircularProgress size={24} />
                   </Stack>
-                </>
-              ) : null}
-            </Stack>
-          </CardContent>
-        </Card>
+                ) : null}
+
+                {!loadingProductSeo && selectedProductInfo ? (
+                  <>
+                    <Alert severity="info">
+                      Editing SEO for <strong>{selectedProductInfo.name}</strong>
+                    </Alert>
+                    {createSeoFields({
+                      title: 'Product Meta & Social Tags',
+                      value: productSeoDraft,
+                      onChange: onChangeProductMeta,
+                      onPickImage: (field, altField) => openMediaDialogFor('product', field, altField)
+                    })}
+                    <Stack direction="row" spacing={0.8}>
+                      <Button
+                        variant="contained"
+                        startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon />}
+                        disabled={saving || !selectedProductId}
+                        onClick={onSaveProductSeo}
+                      >
+                        Save Product SEO
+                      </Button>
+                    </Stack>
+                  </>
+                ) : null}
+              </Stack>
+            </CardContent>
+          </Card>
+        ) : null}
       </Stack>
 
       <MediaLibraryDialog

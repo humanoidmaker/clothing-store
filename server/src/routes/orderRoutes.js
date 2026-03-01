@@ -14,7 +14,7 @@ const {
   updateOrderStatus,
   getOrderReports
 } = require('../controllers/orderController');
-const { protect, admin } = require('../middleware/auth');
+const { protect, admin, adminOrReseller } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -28,8 +28,8 @@ router.post('/payment/verify', protect, verifyPaymentAndCreateOrder);
 router.post('/payment/payu/callback', payuCallbackRedirect);
 router.get('/my', protect, getMyOrders);
 router.get('/my/:id', protect, getMyOrderById);
-router.get('/reports/summary', protect, admin, getOrderReports);
-router.get('/', protect, admin, getAllOrders);
-router.put('/:id/status', protect, admin, updateOrderStatus);
+router.get('/reports/summary', protect, adminOrReseller, getOrderReports);
+router.get('/', protect, adminOrReseller, getAllOrders);
+router.put('/:id/status', protect, adminOrReseller, updateOrderStatus);
 
 module.exports = router;

@@ -1,5 +1,7 @@
 const StoreSettings = require('../models/StoreSettings');
 const { encryptSettingValue } = require('../utils/secureSettings');
+const { resolveResellerContext } = require('../utils/resellerPricing');
+const { getResellerSettingsById, updateResellerSettingsById } = require('../utils/resellerStore');
 
 const SINGLETON_QUERY = { singletonKey: 'default' };
 const defaultStoreName = 'Clothing Store';
@@ -353,13 +355,49 @@ const normalizePaymentGatewaysOutput = (value = {}) => {
   };
 };
 
-const buildResponse = (settings) => ({
-  storeName: settings.storeName,
-  footerText: settings.footerText,
-  showOutOfStockProducts: normalizeShowOutOfStockProducts(settings.showOutOfStockProducts),
-  theme: normalizeThemeOutput(settings.theme),
-  authSecurity: normalizeAuthSecurityPublicOutput(settings.authSecurity || {})
-});
+const resolveResellerPublicSettings = (settings, resellerContext = null) => {
+  const reseller = resellerContext?.reseller || null;
+  const resellerSettings =
+    reseller && reseller.settings && typeof reseller.settings === 'object' && !Array.isArray(reseller.settings)
+      ? reseller.settings
+      : null;
+  const resellerTheme = resellerSettings?.theme && typeof resellerSettings.theme === 'object'
+    ? resellerSettings.theme
+    : null;
+
+  return {
+    storeName: String(resellerSettings?.storeName || reseller?.websiteName || reseller?.name || '').trim() || settings.storeName,
+    footerText: String(resellerSettings?.footerText || '').trim() || settings.footerText,
+    showOutOfStockProducts:
+      typeof resellerSettings?.showOutOfStockProducts === 'boolean'
+        ? resellerSettings.showOutOfStockProducts
+        : normalizeShowOutOfStockProducts(settings.showOutOfStockProducts),
+    theme: normalizeThemeOutput(resellerTheme || settings.theme)
+  };
+};
+
+const buildResponse = (settings, resellerContext = null) => {
+  const reseller = resellerContext?.reseller || null;
+  const resolvedPublicSettings = resolveResellerPublicSettings(settings, resellerContext);
+
+  return {
+    storeName: resolvedPublicSettings.storeName,
+    footerText: resolvedPublicSettings.footerText,
+    showOutOfStockProducts: resolvedPublicSettings.showOutOfStockProducts,
+    theme: resolvedPublicSettings.theme,
+    authSecurity: normalizeAuthSecurityPublicOutput(settings.authSecurity || {}),
+    reseller: reseller
+      ? {
+          id: reseller.id,
+          name: reseller.name,
+          websiteName: reseller.websiteName || reseller.name,
+          adminUserId: String(reseller.adminUserId || '').trim(),
+          adminUserEmail: String(reseller.adminUserEmail || '').trim().toLowerCase(),
+          host: resellerContext?.host || ''
+        }
+      : null
+  };
+};
 
 const buildAdminResponse = (settings) => ({
   ...buildResponse(settings),
@@ -439,7 +477,19 @@ const ensureSettings = async () => {
 
 const getStoreSettings = async (req, res) => {
   const settings = await ensureSettings();
-  return res.json(buildResponse(settings));
+  let resellerContext = await resolveResellerContext(req);
+
+  if (!resellerContext?.reseller && !req.user?.isAdmin && req.user?.isResellerAdmin) {
+    const fallbackReseller = await getResellerSettingsById(String(req.user?.resellerId || '').trim());
+    if (fallbackReseller?.reseller) {
+      resellerContext = {
+        reseller: fallbackReseller.reseller,
+        host: resellerContext?.host || ''
+      };
+    }
+  }
+
+  return res.json(buildResponse(settings, resellerContext));
 };
 
 const getAdminStoreSettings = async (req, res) => {
@@ -946,9 +996,78 @@ const updateStoreSettings = async (req, res) => {
   const hasTheme = Object.prototype.hasOwnProperty.call(req.body || {}, 'theme');
   const hasPaymentGateways = Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentGateways');
   const hasAuthSecurity = Object.prototype.hasOwnProperty.call(req.body || {}, 'authSecurity');
+  const isMainAdmin = Boolean(req.user?.isAdmin);
+  const resellerId = String(req.user?.resellerId || '').trim();
+  const isResellerAdmin = !isMainAdmin && Boolean(req.user?.isResellerAdmin) && Boolean(resellerId);
 
   if (!hasStoreName && !hasFooterText && !hasShowOutOfStockProducts && !hasTheme && !hasPaymentGateways && !hasAuthSecurity) {
     return res.status(400).json({ message: 'No settings fields were provided' });
+  }
+
+  if (!isMainAdmin && !isResellerAdmin) {
+    return res.status(403).json({ message: 'Admin or reseller access required' });
+  }
+
+  if (isResellerAdmin) {
+    if (hasPaymentGateways || hasAuthSecurity) {
+      return res.status(403).json({ message: 'Payment gateways and authentication security are managed by main admin' });
+    }
+
+    const resellerPatch = {};
+
+    if (hasStoreName) {
+      const nextStoreName = String(req.body.storeName || '').trim();
+      if (!nextStoreName) {
+        return res.status(400).json({ message: 'Store name is required' });
+      }
+      if (nextStoreName.length > 80) {
+        return res.status(400).json({ message: 'Store name must be 80 characters or less' });
+      }
+      resellerPatch.storeName = nextStoreName;
+    }
+
+    if (hasFooterText) {
+      const nextFooterText = String(req.body.footerText || '').trim();
+      if (!nextFooterText) {
+        return res.status(400).json({ message: 'Footer text is required' });
+      }
+      if (nextFooterText.length > 220) {
+        return res.status(400).json({ message: 'Footer text must be 220 characters or less' });
+      }
+      resellerPatch.footerText = nextFooterText;
+    }
+
+    if (hasShowOutOfStockProducts) {
+      if (typeof req.body.showOutOfStockProducts !== 'boolean') {
+        return res.status(400).json({ message: 'showOutOfStockProducts must be a boolean value' });
+      }
+      resellerPatch.showOutOfStockProducts = req.body.showOutOfStockProducts;
+    }
+
+    if (hasTheme) {
+      try {
+        resellerPatch.theme = sanitizeTheme(req.body.theme || {});
+      } catch (validationError) {
+        return res.status(400).json({ message: validationError.message || 'Invalid theme settings' });
+      }
+    }
+
+    try {
+      await updateResellerSettingsById(resellerId, resellerPatch);
+      const settings = await ensureSettings();
+      const resellerSettingsState = await getResellerSettingsById(resellerId);
+      const resellerContext = resellerSettingsState
+        ? {
+            reseller: resellerSettingsState.reseller,
+            host: req.headers?.host || ''
+          }
+        : null;
+      return res.json(buildResponse(settings, resellerContext));
+    } catch (error) {
+      const normalizedMessage = String(error.message || '').trim().toLowerCase();
+      const status = normalizedMessage.includes('not found') ? 404 : 400;
+      return res.status(status).json({ message: error.message || 'Failed to update reseller settings' });
+    }
   }
 
   const settings = await ensureSettings();

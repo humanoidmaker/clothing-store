@@ -54,4 +54,24 @@ const admin = (req, res, next) => {
   next();
 };
 
-module.exports = { protect, optionalProtect, admin };
+const resellerAdmin = (req, res, next) => {
+  if (!req.user || !req.user.isResellerAdmin || !String(req.user.resellerId || '').trim()) {
+    return res.status(403).json({ message: 'Reseller admin access required' });
+  }
+  next();
+};
+
+const adminOrReseller = (req, res, next) => {
+  if (!req.user) {
+    return res.status(403).json({ message: 'Admin or reseller access required' });
+  }
+  if (req.user.isAdmin) {
+    return next();
+  }
+  if (req.user.isResellerAdmin && String(req.user.resellerId || '').trim()) {
+    return next();
+  }
+  return res.status(403).json({ message: 'Admin or reseller access required' });
+};
+
+module.exports = { protect, optionalProtect, admin, resellerAdmin, adminOrReseller };

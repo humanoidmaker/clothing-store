@@ -287,6 +287,8 @@ const buildUserResponse = (user) => {
     email: user.email,
     phone: trimOrEmpty(user.phone || ''),
     isAdmin: Boolean(user.isAdmin),
+    isResellerAdmin: Boolean(user.isResellerAdmin),
+    resellerId: trimOrEmpty(user.resellerId || ''),
     defaultShippingAddress: shippingAddress,
     defaultBillingDetails: billingDetails,
     defaultTaxDetails: normalizeTaxDetails(user.defaultTaxDetails || {})

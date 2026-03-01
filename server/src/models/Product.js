@@ -73,6 +73,16 @@ const reviewSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null
+    },
+    resellerId: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    resellerName: {
+      type: String,
+      trim: true,
+      default: ''
     }
   },
   {

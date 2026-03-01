@@ -19,6 +19,7 @@ import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminSeoPage from './pages/AdminSeoPage';
 import AdminPaymentGatewaysPage from './pages/AdminPaymentGatewaysPage';
 import AdminAuthSecuritySettingsPage from './pages/AdminAuthSecuritySettingsPage';
+import AdminResellersPage from './pages/AdminResellersPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
@@ -108,7 +109,7 @@ const AppShell = () => {
                         <Route
                           path="/admin"
                           element={(
-                            <ProtectedRoute adminOnly>
+                            <ProtectedRoute adminOrReseller>
                               <AdminSectionLayout />
                             </ProtectedRoute>
                           )}
@@ -119,9 +120,31 @@ const AppShell = () => {
                           <Route path="products" element={<AdminProductsPage />} />
                           <Route path="reviews" element={<AdminReviewsPage />} />
                           <Route path="orders" element={<AdminOrdersPage />} />
+                          <Route
+                            path="resellers"
+                            element={(
+                              <ProtectedRoute adminOnly>
+                                <AdminResellersPage />
+                              </ProtectedRoute>
+                            )}
+                          />
                           <Route path="settings" element={<AdminSettingsPage />} />
-                          <Route path="settings/payment-gateways" element={<AdminPaymentGatewaysPage />} />
-                          <Route path="settings/auth-security" element={<AdminAuthSecuritySettingsPage />} />
+                          <Route
+                            path="settings/payment-gateways"
+                            element={(
+                              <ProtectedRoute adminOnly>
+                                <AdminPaymentGatewaysPage />
+                              </ProtectedRoute>
+                            )}
+                          />
+                          <Route
+                            path="settings/auth-security"
+                            element={(
+                              <ProtectedRoute adminOnly>
+                                <AdminAuthSecuritySettingsPage />
+                              </ProtectedRoute>
+                            )}
+                          />
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

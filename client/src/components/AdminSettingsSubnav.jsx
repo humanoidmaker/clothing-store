@@ -1,5 +1,6 @@
 import { Button, Stack } from '@mui/material';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const subNavButtonSx = {
   minWidth: 170,
@@ -10,18 +11,26 @@ const subNavButtonSx = {
   }
 };
 
-const AdminSettingsSubnav = () => (
-  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8}>
-    <Button component={NavLink} to="/admin/settings" end variant="outlined" sx={subNavButtonSx}>
-      General Settings
-    </Button>
-    <Button component={NavLink} to="/admin/settings/payment-gateways" variant="outlined" sx={subNavButtonSx}>
-      Payment Gateways
-    </Button>
-    <Button component={NavLink} to="/admin/settings/auth-security" variant="outlined" sx={subNavButtonSx}>
-      Auth & Security
-    </Button>
-  </Stack>
-);
+const AdminSettingsSubnav = () => {
+  const { isAdmin } = useAuth();
+
+  return (
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8}>
+      <Button component={NavLink} to="/admin/settings" end variant="outlined" sx={subNavButtonSx}>
+        General Settings
+      </Button>
+      {isAdmin ? (
+        <Button component={NavLink} to="/admin/settings/payment-gateways" variant="outlined" sx={subNavButtonSx}>
+          Payment Gateways
+        </Button>
+      ) : null}
+      {isAdmin ? (
+        <Button component={NavLink} to="/admin/settings/auth-security" variant="outlined" sx={subNavButtonSx}>
+          Auth & Security
+        </Button>
+      ) : null}
+    </Stack>
+  );
+};
 
 export default AdminSettingsSubnav;

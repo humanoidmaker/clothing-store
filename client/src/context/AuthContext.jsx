@@ -37,7 +37,9 @@ const normalizeUser = (value) => {
     name: normalizeString(value.name || ''),
     email: normalizeString(value.email || ''),
     phone: normalizeString(value.phone || ''),
-    isAdmin: Boolean(value.isAdmin)
+    isAdmin: Boolean(value.isAdmin),
+    isResellerAdmin: Boolean(value.isResellerAdmin),
+    resellerId: normalizeString(value.resellerId || '')
   };
 
   const shippingAddress = normalizeAddress(value.defaultShippingAddress || {}, {
@@ -185,6 +187,8 @@ export const AuthProvider = ({ children }) => {
       loading,
       isAuthenticated: Boolean(user),
       isAdmin: Boolean(user?.isAdmin),
+      isResellerAdmin: Boolean(user?.isResellerAdmin),
+      resellerId: normalizeString(user?.resellerId || ''),
       login,
       register,
       forgotPassword,

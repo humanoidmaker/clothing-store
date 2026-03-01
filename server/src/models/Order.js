@@ -115,6 +115,21 @@ const orderSchema = new mongoose.Schema(
       codCharge: { type: Number, min: 0, default: 0 },
       finalTotal: { type: Number, min: 0, default: 0 }
     },
+    resellerId: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    resellerName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    resellerDomain: {
+      type: String,
+      trim: true,
+      default: ''
+    },
     status: {
       type: String,
       enum: ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'],

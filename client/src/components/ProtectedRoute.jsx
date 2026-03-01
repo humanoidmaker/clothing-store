@@ -2,8 +2,8 @@
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children, adminOnly = false }) => {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+const ProtectedRoute = ({ children, adminOnly = false, adminOrReseller = false }) => {
+  const { isAuthenticated, isAdmin, isResellerAdmin, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -19,6 +19,10 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
 
   if (adminOnly && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (adminOrReseller && !isAdmin && !isResellerAdmin) {
     return <Navigate to="/" replace />;
   }
 

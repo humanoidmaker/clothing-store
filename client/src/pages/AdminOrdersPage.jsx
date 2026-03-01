@@ -38,6 +38,7 @@ import api from '../api';
 import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 import { Link as RouterLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const statusOptions = ['all', 'pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
 const updateStatuses = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
@@ -109,6 +110,7 @@ const createInitialManualInvoice = () => ({
 });
 
 const AdminOrdersPage = () => {
+  const { isAdmin } = useAuth();
   const theme = useTheme();
   const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
   const [orders, setOrders] = useState([]);
@@ -283,6 +285,9 @@ const AdminOrdersPage = () => {
   };
 
   const onOpenInvoiceDialog = async () => {
+    if (!isAdmin) {
+      return;
+    }
     resetManualInvoice();
     setInvoiceDialogOpen(true);
     setInvoiceLoadingCatalog(true);
@@ -431,14 +436,16 @@ const AdminOrdersPage = () => {
             <Chip size="small" color="warning" label={`Pending: ${countByStatus.pending + countByStatus.processing}`} />
             <Chip size="small" color="info" label={`Shipped: ${countByStatus.shipped}`} />
             <Chip size="small" color="success" label={`Delivered: ${countByStatus.delivered}`} />
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<ReceiptLongOutlinedIcon />}
-              onClick={onOpenInvoiceDialog}
-            >
-              Create Invoice
-            </Button>
+            {isAdmin ? (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<ReceiptLongOutlinedIcon />}
+                onClick={onOpenInvoiceDialog}
+              >
+                Create Invoice
+              </Button>
+            ) : null}
           </Stack>
         }
       />
@@ -709,7 +716,7 @@ const AdminOrdersPage = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={invoiceDialogOpen} onClose={onCloseInvoiceDialog} maxWidth="md" fullWidth>
+      <Dialog open={invoiceDialogOpen && isAdmin} onClose={onCloseInvoiceDialog} maxWidth="md" fullWidth>
         <DialogTitle>Create Manual Invoice</DialogTitle>
         <DialogContent dividers>
           <Stack component="form" id="manual-invoice-form" onSubmit={onCreateManualInvoice} spacing={1.2} sx={{ mt: 0.4 }}>

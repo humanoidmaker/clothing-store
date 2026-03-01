@@ -5,6 +5,7 @@ import connectDB from '../../server/src/config/db';
 import Product from '../../server/src/models/Product';
 import StoreSettings from '../../server/src/models/StoreSettings';
 import SeoSettings from '../../server/src/models/SeoSettings';
+import resellerStoreUtils from '../../server/src/utils/resellerStore';
 import seoUtils from '../../server/src/utils/seo';
 
 const {
@@ -16,6 +17,7 @@ const {
   resolveSeoForRendering,
   buildNextMetadata
 } = seoUtils;
+const { normalizeHost, findResellerByHost } = resellerStoreUtils;
 
 const LegacyApp = dynamicImport(() => import('../../client/src/App'), {
   ssr: false
@@ -29,6 +31,12 @@ const getRequestOrigin = () => {
   const host = headerStore.get('x-forwarded-host') || headerStore.get('host') || `localhost:${process.env.PORT || 3000}`;
   const protocol = headerStore.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
   return `${protocol}://${host}`;
+};
+
+const getRequestHost = () => {
+  const headerStore = headers();
+  const host = headerStore.get('x-forwarded-host') || headerStore.get('host') || '';
+  return normalizeHost(host);
 };
 
 const toPathname = (slugSegments = []) => {
@@ -53,17 +61,34 @@ export async function generateMetadata({ params }) {
   const slugSegments = Array.isArray(params?.slug) ? params.slug : [];
   const pathname = toPathname(slugSegments);
   const origin = getRequestOrigin();
+  const requestHost = getRequestHost();
 
   await connectDB();
 
-  const [storeSettings, seoSettings] = await Promise.all([
-    StoreSettings.findOne({ singletonKey: 'default' }).select('storeName').lean(),
-    SeoSettings.findOne({ singletonKey: 'default' }).select('defaults publicPages').lean()
-  ]);
+  const reseller = requestHost ? await findResellerByHost(requestHost) : null;
 
-  const storeName = String(storeSettings?.storeName || 'Clothing Store').trim() || 'Clothing Store';
-  const defaults = sanitizeSeoMeta(seoSettings?.defaults || {});
-  const publicPages = mergePublicPages(seoSettings?.publicPages || [], storeName);
+  let storeName = 'Clothing Store';
+  let defaults = sanitizeSeoMeta({});
+  let publicPages = mergePublicPages([], storeName);
+
+  if (reseller) {
+    const resellerSettings = reseller.settings && typeof reseller.settings === 'object' ? reseller.settings : {};
+    const resellerSeo = reseller.seo && typeof reseller.seo === 'object' ? reseller.seo : {};
+    storeName =
+      String(resellerSettings.storeName || reseller.websiteName || reseller.name || 'Clothing Store').trim() ||
+      'Clothing Store';
+    defaults = sanitizeSeoMeta(resellerSeo.defaults || {});
+    publicPages = mergePublicPages(resellerSeo.publicPages || [], storeName);
+  } else {
+    const [storeSettings, seoSettings] = await Promise.all([
+      StoreSettings.findOne({ singletonKey: 'default' }).select('storeName').lean(),
+      SeoSettings.findOne({ singletonKey: 'default' }).select('defaults publicPages').lean()
+    ]);
+    storeName = String(storeSettings?.storeName || 'Clothing Store').trim() || 'Clothing Store';
+    defaults = sanitizeSeoMeta(seoSettings?.defaults || {});
+    publicPages = mergePublicPages(seoSettings?.publicPages || [], storeName);
+  }
+
   const isProductDetailPage = slugSegments.length >= 2 && slugSegments[0] === 'products';
 
   if (isProductDetailPage && mongoose.Types.ObjectId.isValid(slugSegments[1])) {

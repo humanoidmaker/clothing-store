@@ -12,6 +12,7 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
 - File-based media storage (`storage/media/YYYY/MM/DD/...`) with URLs in MongoDB
 - Media route protection (rate limiting + hotlink protection) and CDN-ready asset URLs
 - Razorpay payment flow with admin-managed credentials
+- Dropshipping reseller websites with domain-based pricing margins (file-managed, no extra DB collections)
 
 ## Tech Stack
 
@@ -114,6 +115,8 @@ Optional flags:
 - `PAGE_BOT_RATE_LIMIT_MAX`: stricter max page requests per IP/window for bot user-agents
 - `ENABLE_HOTLINK_PROTECTION`: block offsite referrers from directly embedding local media (`true`/`false`)
 - `HOTLINK_ALLOWED_DOMAINS`: comma-separated domains allowed to hotlink local media
+- `ENABLE_RESELLER_DEV_PORTS`: enable/disable automatic reseller localhost ports in dev (`true`/`false`, default `true`)
+- `RESELLER_DEV_PORT_START`: starting port for auto-assigned reseller dev websites (default `3100`)
 
 ## Available Scripts
 
@@ -121,6 +124,23 @@ Optional flags:
 - `npm run build`: build Next.js app
 - `npm start`: run production server
 - `npm run seed`: seed database
+
+## Reseller Dropshipping
+
+- Open `Admin -> Resellers` to create unlimited reseller websites.
+- Each reseller maps to one or more domains and can be enabled/disabled.
+- Each reseller has a `primary domain` used as the main storefront domain.
+- Product catalog stays shared; reseller pricing is virtual and margin-based:
+  - Apply one margin to all products.
+  - Set/clear per-product margin overrides.
+- Reseller configuration is stored in `storage/resellers.json` to keep it lightweight and database-free for this module.
+- On a mapped reseller domain, storefront prices and checkout totals automatically use that reseller margin.
+
+### Development Domain Testing
+
+- In development (`npm run dev`), each reseller automatically gets a dedicated local port (starting from `RESELLER_DEV_PORT_START`).
+- Just create reseller in admin and click `Open Dev URL` to open its own website.
+- Behind the scenes, local proxy ports forward to the main app and inject reseller host automatically.
 
 ## Seed Admin (Default)
 
