@@ -3,6 +3,10 @@ const {
   createOrder,
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
+  getPaymentGatewayOptions,
+  createPaymentIntent,
+  verifyPaymentAndCreateOrder,
+  payuCallbackRedirect,
   getMyOrders,
   getMyOrderById,
   getAllOrders,
@@ -16,6 +20,10 @@ const router = express.Router();
 router.post('/', protect, createOrder);
 router.post('/razorpay/order', protect, createRazorpayOrder);
 router.post('/razorpay/verify', protect, verifyRazorpayPaymentAndCreateOrder);
+router.get('/payment/options', protect, getPaymentGatewayOptions);
+router.post('/payment/initiate', protect, createPaymentIntent);
+router.post('/payment/verify', protect, verifyPaymentAndCreateOrder);
+router.post('/payment/payu/callback', payuCallbackRedirect);
 router.get('/my', protect, getMyOrders);
 router.get('/my/:id', protect, getMyOrderById);
 router.get('/reports/summary', protect, admin, getOrderReports);

@@ -11,6 +11,24 @@ const PIPELINE_STATUSES = ['pending', 'processing'];
 const REPORT_INTERVALS = ['day', 'week', 'month'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
+const DEFAULT_PAYMENT_GATEWAYS = StoreSettings.defaultPaymentGatewaySettings || {
+  cashOnDelivery: { enabled: true },
+  razorpay: { enabled: true, keyId: '', keySecretEncrypted: '', updatedAt: null },
+  stripe: { enabled: false, publishableKey: '', secretKeyEncrypted: '', webhookSecretEncrypted: '', updatedAt: null },
+  paypal: { enabled: false, clientId: '', clientSecretEncrypted: '', environment: 'sandbox', updatedAt: null },
+  payu: { enabled: false, merchantKey: '', merchantSaltEncrypted: '', environment: 'test', updatedAt: null },
+  cashfree: { enabled: false, appId: '', secretKeyEncrypted: '', environment: 'sandbox', updatedAt: null },
+  phonepe: { enabled: false, merchantId: '', saltKeyEncrypted: '', saltIndex: '1', environment: 'sandbox', updatedAt: null }
+};
+const PAYMENT_METHOD_LABELS = {
+  cash_on_delivery: 'Cash on Delivery',
+  razorpay: 'Razorpay',
+  stripe: 'Stripe',
+  paypal: 'PayPal',
+  payu: 'PayU',
+  cashfree: 'Cashfree',
+  phonepe: 'PhonePe'
+};
 
 const validateShippingAddress = (shippingAddress) => {
   const requiredKeys = ['street', 'city', 'state', 'postalCode', 'country'];
@@ -299,11 +317,17 @@ const createStoredOrder = async ({
 
 const getRazorpayClient = async () => {
   try {
-    const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('razorpay');
-    const keyId = String(settings?.razorpay?.keyId || '').trim();
-    const encryptedSecret = String(settings?.razorpay?.keySecretEncrypted || '').trim();
+    const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
+    const paymentGateways = settings?.paymentGateways || {};
+    const keyId =
+      String(paymentGateways?.razorpay?.keyId || '').trim() || String(settings?.razorpay?.keyId || '').trim();
+    const encryptedSecret =
+      String(paymentGateways?.razorpay?.keySecretEncrypted || '').trim() ||
+      String(settings?.razorpay?.keySecretEncrypted || '').trim();
+    const enabled =
+      typeof paymentGateways?.razorpay?.enabled === 'boolean' ? Boolean(paymentGateways.razorpay.enabled) : true;
 
-    if (!keyId || !encryptedSecret) {
+    if (!enabled || !keyId || !encryptedSecret) {
       return { error: { status: 500, message: 'Razorpay keys are not configured in admin settings' } };
     }
 
@@ -474,6 +498,915 @@ const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
     message: 'Payment verified and order placed',
     order: saved.order
   });
+};
+
+const cloneGatewayDefaults = () => JSON.parse(JSON.stringify(DEFAULT_PAYMENT_GATEWAYS));
+
+const normalizeGatewayId = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (['cod', 'cash on delivery', 'cash_on_delivery'].includes(raw)) {
+    return 'cash_on_delivery';
+  }
+  return raw;
+};
+
+const normalizeStoredGatewaySettings = (settingsDoc = {}) => {
+  const defaults = cloneGatewayDefaults();
+  const stored = settingsDoc?.paymentGateways || {};
+  const legacyRazorpay = settingsDoc?.razorpay || {};
+
+  const normalized = {
+    cashOnDelivery: {
+      enabled:
+        typeof stored?.cashOnDelivery?.enabled === 'boolean'
+          ? stored.cashOnDelivery.enabled
+          : defaults.cashOnDelivery.enabled
+    },
+    razorpay: {
+      enabled: typeof stored?.razorpay?.enabled === 'boolean' ? stored.razorpay.enabled : defaults.razorpay.enabled,
+      keyId: String(stored?.razorpay?.keyId || '').trim(),
+      keySecretEncrypted: String(stored?.razorpay?.keySecretEncrypted || '').trim(),
+      updatedAt: stored?.razorpay?.updatedAt || null
+    },
+    stripe: {
+      enabled: typeof stored?.stripe?.enabled === 'boolean' ? stored.stripe.enabled : defaults.stripe.enabled,
+      publishableKey: String(stored?.stripe?.publishableKey || '').trim(),
+      keySecretEncrypted: String(stored?.stripe?.secretKeyEncrypted || '').trim(),
+      updatedAt: stored?.stripe?.updatedAt || null
+    },
+    paypal: {
+      enabled: typeof stored?.paypal?.enabled === 'boolean' ? stored.paypal.enabled : defaults.paypal.enabled,
+      clientId: String(stored?.paypal?.clientId || '').trim(),
+      clientSecretEncrypted: String(stored?.paypal?.clientSecretEncrypted || '').trim(),
+      environment:
+        ['sandbox', 'live'].includes(String(stored?.paypal?.environment || '').trim().toLowerCase())
+          ? String(stored.paypal.environment).trim().toLowerCase()
+          : defaults.paypal.environment,
+      updatedAt: stored?.paypal?.updatedAt || null
+    },
+    payu: {
+      enabled: typeof stored?.payu?.enabled === 'boolean' ? stored.payu.enabled : defaults.payu.enabled,
+      merchantKey: String(stored?.payu?.merchantKey || '').trim(),
+      merchantSaltEncrypted: String(stored?.payu?.merchantSaltEncrypted || '').trim(),
+      environment:
+        ['test', 'live'].includes(String(stored?.payu?.environment || '').trim().toLowerCase())
+          ? String(stored.payu.environment).trim().toLowerCase()
+          : defaults.payu.environment,
+      updatedAt: stored?.payu?.updatedAt || null
+    },
+    cashfree: {
+      enabled: typeof stored?.cashfree?.enabled === 'boolean' ? stored.cashfree.enabled : defaults.cashfree.enabled,
+      appId: String(stored?.cashfree?.appId || '').trim(),
+      secretKeyEncrypted: String(stored?.cashfree?.secretKeyEncrypted || '').trim(),
+      environment:
+        ['sandbox', 'production'].includes(String(stored?.cashfree?.environment || '').trim().toLowerCase())
+          ? String(stored.cashfree.environment).trim().toLowerCase()
+          : defaults.cashfree.environment,
+      updatedAt: stored?.cashfree?.updatedAt || null
+    },
+    phonepe: {
+      enabled: typeof stored?.phonepe?.enabled === 'boolean' ? stored.phonepe.enabled : defaults.phonepe.enabled,
+      merchantId: String(stored?.phonepe?.merchantId || '').trim(),
+      saltKeyEncrypted: String(stored?.phonepe?.saltKeyEncrypted || '').trim(),
+      saltIndex: String(stored?.phonepe?.saltIndex || '').trim() || defaults.phonepe.saltIndex,
+      environment:
+        ['sandbox', 'production'].includes(String(stored?.phonepe?.environment || '').trim().toLowerCase())
+          ? String(stored.phonepe.environment).trim().toLowerCase()
+          : defaults.phonepe.environment,
+      updatedAt: stored?.phonepe?.updatedAt || null
+    }
+  };
+
+  if (!normalized.razorpay.keyId) {
+    normalized.razorpay.keyId = String(legacyRazorpay?.keyId || '').trim();
+  }
+  if (!normalized.razorpay.keySecretEncrypted) {
+    normalized.razorpay.keySecretEncrypted = String(legacyRazorpay?.keySecretEncrypted || '').trim();
+  }
+
+  return normalized;
+};
+
+const parseJsonSafely = async (response) => {
+  const rawText = await response.text();
+  try {
+    return rawText ? JSON.parse(rawText) : {};
+  } catch {
+    return { rawText };
+  }
+};
+
+const decryptSecret = (encryptedValue) => {
+  const value = String(encryptedValue || '').trim();
+  if (!value) {
+    return '';
+  }
+  return decryptSettingValue(value);
+};
+
+const loadPaymentGatewayConfig = async () => {
+  const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
+  const normalized = normalizeStoredGatewaySettings(settings || {});
+
+  return {
+    cashOnDelivery: {
+      enabled: Boolean(normalized.cashOnDelivery.enabled)
+    },
+    razorpay: {
+      enabled: Boolean(normalized.razorpay.enabled),
+      keyId: normalized.razorpay.keyId,
+      keySecret: decryptSecret(normalized.razorpay.keySecretEncrypted),
+      configured: Boolean(normalized.razorpay.keyId && normalized.razorpay.keySecretEncrypted)
+    },
+    stripe: {
+      enabled: Boolean(normalized.stripe.enabled),
+      publishableKey: normalized.stripe.publishableKey,
+      secretKey: decryptSecret(normalized.stripe.keySecretEncrypted),
+      configured: Boolean(normalized.stripe.publishableKey && normalized.stripe.keySecretEncrypted)
+    },
+    paypal: {
+      enabled: Boolean(normalized.paypal.enabled),
+      clientId: normalized.paypal.clientId,
+      clientSecret: decryptSecret(normalized.paypal.clientSecretEncrypted),
+      environment: normalized.paypal.environment,
+      configured: Boolean(normalized.paypal.clientId && normalized.paypal.clientSecretEncrypted)
+    },
+    payu: {
+      enabled: Boolean(normalized.payu.enabled),
+      merchantKey: normalized.payu.merchantKey,
+      merchantSalt: decryptSecret(normalized.payu.merchantSaltEncrypted),
+      environment: normalized.payu.environment,
+      configured: Boolean(normalized.payu.merchantKey && normalized.payu.merchantSaltEncrypted)
+    },
+    cashfree: {
+      enabled: Boolean(normalized.cashfree.enabled),
+      appId: normalized.cashfree.appId,
+      secretKey: decryptSecret(normalized.cashfree.secretKeyEncrypted),
+      environment: normalized.cashfree.environment,
+      configured: Boolean(normalized.cashfree.appId && normalized.cashfree.secretKeyEncrypted)
+    },
+    phonepe: {
+      enabled: Boolean(normalized.phonepe.enabled),
+      merchantId: normalized.phonepe.merchantId,
+      saltKey: decryptSecret(normalized.phonepe.saltKeyEncrypted),
+      saltIndex: normalized.phonepe.saltIndex,
+      environment: normalized.phonepe.environment,
+      configured: Boolean(normalized.phonepe.merchantId && normalized.phonepe.saltKeyEncrypted)
+    }
+  };
+};
+
+const resolveClientBaseUrl = (req) => {
+  const explicit = String(process.env.CLIENT_URL || '').trim();
+  if (explicit) {
+    return explicit.replace(/\/$/, '');
+  }
+  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+};
+
+const resolveApiBaseUrl = (req) => `${req.protocol}://${req.get('host')}/api`;
+
+const getPaymentGatewayOptions = async (req, res) => {
+  let config;
+  try {
+    config = await loadPaymentGatewayConfig();
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Unable to load payment gateway settings' });
+  }
+
+  const methods = [];
+  if (config.cashOnDelivery.enabled) {
+    methods.push({ id: 'cash_on_delivery', label: PAYMENT_METHOD_LABELS.cash_on_delivery, flow: 'direct' });
+  }
+  if (config.razorpay.enabled && config.razorpay.configured) {
+    methods.push({ id: 'razorpay', label: PAYMENT_METHOD_LABELS.razorpay, flow: 'razorpay_popup' });
+  }
+  if (config.stripe.enabled && config.stripe.configured) {
+    methods.push({ id: 'stripe', label: PAYMENT_METHOD_LABELS.stripe, flow: 'redirect' });
+  }
+  if (config.paypal.enabled && config.paypal.configured) {
+    methods.push({ id: 'paypal', label: PAYMENT_METHOD_LABELS.paypal, flow: 'redirect' });
+  }
+  if (config.payu.enabled && config.payu.configured) {
+    methods.push({ id: 'payu', label: PAYMENT_METHOD_LABELS.payu, flow: 'form_post' });
+  }
+  if (config.cashfree.enabled && config.cashfree.configured) {
+    methods.push({ id: 'cashfree', label: PAYMENT_METHOD_LABELS.cashfree, flow: 'redirect' });
+  }
+  if (config.phonepe.enabled && config.phonepe.configured) {
+    methods.push({ id: 'phonepe', label: PAYMENT_METHOD_LABELS.phonepe, flow: 'redirect' });
+  }
+
+  return res.json({ methods });
+};
+
+const createPaymentIntent = async (req, res) => {
+  const gateway = normalizeGatewayId(req.body?.gateway);
+  const { items, shippingAddress } = req.body;
+
+  if (!gateway) {
+    return res.status(400).json({ message: 'Payment gateway is required' });
+  }
+  if (!validateShippingAddress(shippingAddress)) {
+    return res.status(400).json({ message: 'Complete shipping address is required' });
+  }
+
+  const prepared = await prepareOrderItems(items);
+  if (prepared.error) {
+    return res.status(prepared.error.status).json({ message: prepared.error.message });
+  }
+  const amountPaise = Math.round(prepared.totalPrice * 100);
+  if (amountPaise < 100) {
+    return res.status(400).json({ message: 'Order amount must be at least INR 1.00' });
+  }
+
+  let config;
+  try {
+    config = await loadPaymentGatewayConfig();
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Unable to load payment gateway settings' });
+  }
+
+  if (gateway === 'cash_on_delivery') {
+    if (!config.cashOnDelivery.enabled) {
+      return res.status(400).json({ message: 'Cash on Delivery is currently disabled' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.cash_on_delivery
+    });
+
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+
+    return res.status(201).json({
+      gateway,
+      flow: 'direct',
+      order: saved.order
+    });
+  }
+
+  if (gateway === 'razorpay') {
+    if (!config.razorpay.enabled || !config.razorpay.configured) {
+      return res.status(400).json({ message: 'Razorpay is currently not configured' });
+    }
+
+    const receipt = `rcpt_${Date.now()}_${String(req.user._id).slice(-6)}`.slice(0, 40);
+    const razorpayClient = new Razorpay({
+      key_id: config.razorpay.keyId,
+      key_secret: config.razorpay.keySecret
+    });
+
+    let razorpayOrder;
+    try {
+      razorpayOrder = await razorpayClient.orders.create({
+        amount: amountPaise,
+        currency: 'INR',
+        receipt
+      });
+    } catch {
+      return res.status(502).json({ message: 'Failed to create Razorpay order' });
+    }
+
+    return res.json({
+      gateway,
+      flow: 'razorpay_popup',
+      keyId: config.razorpay.keyId,
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency
+    });
+  }
+
+  if (gateway === 'stripe') {
+    if (!config.stripe.enabled || !config.stripe.configured) {
+      return res.status(400).json({ message: 'Stripe is currently not configured' });
+    }
+
+    const params = new URLSearchParams();
+    params.append('mode', 'payment');
+    params.append(
+      'success_url',
+      `${resolveClientBaseUrl(req)}/checkout?gateway=stripe&status=success&session_id={CHECKOUT_SESSION_ID}`
+    );
+    params.append('cancel_url', `${resolveClientBaseUrl(req)}/checkout?gateway=stripe&cancelled=1`);
+    params.append('line_items[0][price_data][currency]', 'inr');
+    params.append('line_items[0][price_data][product_data][name]', 'Order Payment');
+    params.append('line_items[0][price_data][unit_amount]', String(amountPaise));
+    params.append('line_items[0][quantity]', '1');
+    params.append('payment_method_types[0]', 'card');
+    if (req.user?.email) {
+      params.append('customer_email', req.user.email);
+    }
+
+    const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.stripe.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    });
+    const stripeData = await parseJsonSafely(stripeResponse);
+    if (!stripeResponse.ok || !stripeData.url || !stripeData.id) {
+      return res.status(502).json({ message: 'Failed to create Stripe checkout session' });
+    }
+
+    return res.json({
+      gateway,
+      flow: 'redirect',
+      redirectUrl: stripeData.url,
+      stripeSessionId: stripeData.id
+    });
+  }
+
+  if (gateway === 'paypal') {
+    if (!config.paypal.enabled || !config.paypal.configured) {
+      return res.status(400).json({ message: 'PayPal is currently not configured' });
+    }
+
+    const paypalBase =
+      config.paypal.environment === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+    const auth = Buffer.from(`${config.paypal.clientId}:${config.paypal.clientSecret}`).toString('base64');
+
+    const tokenResponse = await fetch(`${paypalBase}/v1/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials'
+    });
+    const tokenData = await parseJsonSafely(tokenResponse);
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      return res.status(502).json({ message: 'Failed to connect with PayPal' });
+    }
+
+    const usdAmount = (Number(prepared.totalPrice || 0) / 83).toFixed(2);
+    const paypalOrderResponse = await fetch(`${paypalBase}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [
+          {
+            amount: {
+              currency_code: 'USD',
+              value: usdAmount
+            }
+          }
+        ],
+        application_context: {
+          return_url: `${resolveClientBaseUrl(req)}/checkout?gateway=paypal&status=success`,
+          cancel_url: `${resolveClientBaseUrl(req)}/checkout?gateway=paypal&cancelled=1`,
+          shipping_preference: 'NO_SHIPPING'
+        }
+      })
+    });
+    const paypalOrderData = await parseJsonSafely(paypalOrderResponse);
+    const approveLink = Array.isArray(paypalOrderData.links)
+      ? paypalOrderData.links.find((entry) => entry.rel === 'approve')?.href
+      : '';
+
+    if (!paypalOrderResponse.ok || !approveLink || !paypalOrderData.id) {
+      return res.status(502).json({ message: 'Failed to create PayPal order' });
+    }
+
+    return res.json({
+      gateway,
+      flow: 'redirect',
+      redirectUrl: approveLink,
+      paypalOrderId: paypalOrderData.id
+    });
+  }
+
+  if (gateway === 'payu') {
+    if (!config.payu.enabled || !config.payu.configured) {
+      return res.status(400).json({ message: 'PayU is currently not configured' });
+    }
+
+    const payuBase = config.payu.environment === 'live' ? 'https://secure.payu.in' : 'https://test.payu.in';
+    const txnid = `payu_${Date.now()}_${String(req.user._id).slice(-6)}`.slice(0, 30);
+    const amount = Number(prepared.totalPrice).toFixed(2);
+    const firstname = String(req.user?.name || 'Customer').trim().split(' ')[0];
+    const email = String(req.user?.email || '').trim();
+    const productinfo = 'Order Payment';
+    const hash = crypto
+      .createHash('sha512')
+      .update(
+        `${config.payu.merchantKey}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${config.payu.merchantSalt}`
+      )
+      .digest('hex');
+
+    return res.json({
+      gateway,
+      flow: 'form_post',
+      actionUrl: `${payuBase}/_payment`,
+      method: 'POST',
+      fields: {
+        key: config.payu.merchantKey,
+        txnid,
+        amount,
+        productinfo,
+        firstname,
+        email,
+        phone: '9999999999',
+        surl: `${resolveApiBaseUrl(req)}/orders/payment/payu/callback?result=success`,
+        furl: `${resolveApiBaseUrl(req)}/orders/payment/payu/callback?result=failure`,
+        hash,
+        service_provider: 'payu_paisa'
+      }
+    });
+  }
+
+  if (gateway === 'cashfree') {
+    if (!config.cashfree.enabled || !config.cashfree.configured) {
+      return res.status(400).json({ message: 'Cashfree is currently not configured' });
+    }
+
+    const cashfreeBase =
+      config.cashfree.environment === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+    const cashfreeOrderId = `cf_${Date.now()}_${String(req.user._id).slice(-6)}`.slice(0, 40);
+    const cashfreeResponse = await fetch(`${cashfreeBase}/orders`, {
+      method: 'POST',
+      headers: {
+        'x-api-version': '2023-08-01',
+        'x-client-id': config.cashfree.appId,
+        'x-client-secret': config.cashfree.secretKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        order_id: cashfreeOrderId,
+        order_amount: Number(prepared.totalPrice.toFixed(2)),
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: String(req.user._id),
+          customer_name: String(req.user?.name || 'Customer'),
+          customer_email: String(req.user?.email || 'customer@example.com'),
+          customer_phone: '9999999999'
+        },
+        order_meta: {
+          return_url: `${resolveClientBaseUrl(req)}/checkout?gateway=cashfree&status=success&order_id={order_id}`
+        }
+      })
+    });
+    const cashfreeData = await parseJsonSafely(cashfreeResponse);
+    const redirectUrl =
+      String(cashfreeData.payment_link || '').trim() ||
+      (cashfreeData.payment_session_id ? `https://payments.cashfree.com/order/#${cashfreeData.payment_session_id}` : '');
+
+    if (!cashfreeResponse.ok || !cashfreeData.order_id || !redirectUrl) {
+      return res.status(502).json({ message: 'Failed to create Cashfree payment order' });
+    }
+
+    return res.json({
+      gateway,
+      flow: 'redirect',
+      redirectUrl,
+      cashfreeOrderId: cashfreeData.order_id
+    });
+  }
+
+  if (gateway === 'phonepe') {
+    if (!config.phonepe.enabled || !config.phonepe.configured) {
+      return res.status(400).json({ message: 'PhonePe is currently not configured' });
+    }
+
+    const phonepeBase =
+      config.phonepe.environment === 'production'
+        ? 'https://api.phonepe.com/apis/hermes'
+        : 'https://api-preprod.phonepe.com/apis/pg-sandbox';
+    const phonepeTransactionId = `php_${Date.now()}_${String(req.user._id).slice(-6)}`.slice(0, 35);
+    const requestPayload = Buffer.from(
+      JSON.stringify({
+        merchantId: config.phonepe.merchantId,
+        merchantTransactionId: phonepeTransactionId,
+        merchantUserId: String(req.user._id),
+        amount: amountPaise,
+        redirectUrl: `${resolveClientBaseUrl(req)}/checkout?gateway=phonepe&status=success&transaction_id=${phonepeTransactionId}`,
+        redirectMode: 'REDIRECT',
+        callbackUrl: `${resolveApiBaseUrl(req)}/orders/payment/phonepe/callback`,
+        mobileNumber: '9999999999',
+        paymentInstrument: { type: 'PAY_PAGE' }
+      })
+    ).toString('base64');
+
+    const payPath = '/pg/v1/pay';
+    const checksum = `${crypto
+      .createHash('sha256')
+      .update(`${requestPayload}${payPath}${config.phonepe.saltKey}`)
+      .digest('hex')}###${config.phonepe.saltIndex}`;
+
+    const phonepeResponse = await fetch(`${phonepeBase}${payPath}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-VERIFY': checksum
+      },
+      body: JSON.stringify({ request: requestPayload })
+    });
+    const phonepeData = await parseJsonSafely(phonepeResponse);
+    const redirectUrl = phonepeData?.data?.instrumentResponse?.redirectInfo?.url;
+    if (!phonepeResponse.ok || !redirectUrl) {
+      return res.status(502).json({ message: 'Failed to create PhonePe payment session' });
+    }
+
+    return res.json({
+      gateway,
+      flow: 'redirect',
+      redirectUrl,
+      phonepeTransactionId
+    });
+  }
+
+  return res.status(400).json({ message: `Unsupported payment gateway: ${gateway}` });
+};
+
+const verifyPaymentAndCreateOrder = async (req, res) => {
+  const gateway = normalizeGatewayId(req.body?.gateway);
+  const { items, shippingAddress } = req.body;
+
+  if (!gateway) {
+    return res.status(400).json({ message: 'Payment gateway is required' });
+  }
+  if (!validateShippingAddress(shippingAddress)) {
+    return res.status(400).json({ message: 'Complete shipping address is required' });
+  }
+
+  const prepared = await prepareOrderItems(items);
+  if (prepared.error) {
+    return res.status(prepared.error.status).json({ message: prepared.error.message });
+  }
+  const expectedAmountPaise = Math.round(prepared.totalPrice * 100);
+
+  let config;
+  try {
+    config = await loadPaymentGatewayConfig();
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Unable to load payment gateway settings' });
+  }
+
+  if (gateway === 'razorpay') {
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return res.status(400).json({ message: 'Payment verification fields are required' });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', config.razorpay.keySecret)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+    if (expectedSignature !== razorpaySignature) {
+      return res.status(400).json({ message: 'Invalid Razorpay signature' });
+    }
+
+    const existing = await Order.findOne({ 'paymentResult.razorpayPaymentId': razorpayPaymentId }).select('_id');
+    if (existing) {
+      return res.status(409).json({ message: 'This payment is already processed' });
+    }
+
+    const razorpayClient = new Razorpay({
+      key_id: config.razorpay.keyId,
+      key_secret: config.razorpay.keySecret
+    });
+    let payment;
+    try {
+      payment = await razorpayClient.payments.fetch(razorpayPaymentId);
+    } catch {
+      return res.status(400).json({ message: 'Unable to verify payment with Razorpay' });
+    }
+    if (!payment || payment.order_id !== razorpayOrderId) {
+      return res.status(400).json({ message: 'Payment/order mismatch' });
+    }
+    if (!['captured', 'authorized'].includes(payment.status)) {
+      return res.status(400).json({ message: 'Payment is not completed' });
+    }
+    if (Number(payment.amount) !== expectedAmountPaise) {
+      return res.status(400).json({ message: 'Payment amount does not match order total' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.razorpay,
+      status: 'paid',
+      paidAt: new Date(),
+      paymentResult: {
+        gateway: 'razorpay',
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature
+      }
+    });
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+    return res.status(201).json({ message: 'Payment verified and order placed', order: saved.order });
+  }
+
+  if (gateway === 'stripe') {
+    const stripeSessionId = String(req.body?.stripeSessionId || req.body?.session_id || '').trim();
+    if (!stripeSessionId) {
+      return res.status(400).json({ message: 'Stripe session id is required' });
+    }
+
+    const existing = await Order.findOne({ 'paymentResult.stripeSessionId': stripeSessionId }).select('_id');
+    if (existing) {
+      return res.status(409).json({ message: 'This payment is already processed' });
+    }
+
+    const stripeResponse = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(stripeSessionId)}`, {
+      headers: { Authorization: `Bearer ${config.stripe.secretKey}` }
+    });
+    const stripeData = await parseJsonSafely(stripeResponse);
+    if (!stripeResponse.ok || stripeData.payment_status !== 'paid') {
+      return res.status(400).json({ message: 'Unable to verify payment with Stripe' });
+    }
+    if (Number(stripeData.amount_total || 0) !== expectedAmountPaise) {
+      return res.status(400).json({ message: 'Payment amount does not match order total' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.stripe,
+      status: 'paid',
+      paidAt: new Date(),
+      paymentResult: {
+        gateway: 'stripe',
+        stripeSessionId,
+        stripePaymentIntentId: String(stripeData.payment_intent || '')
+      }
+    });
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+    return res.status(201).json({ message: 'Payment verified and order placed', order: saved.order });
+  }
+
+  if (gateway === 'paypal') {
+    const paypalOrderId = String(req.body?.paypalOrderId || req.body?.token || '').trim();
+    if (!paypalOrderId) {
+      return res.status(400).json({ message: 'PayPal order id is required' });
+    }
+
+    const existing = await Order.findOne({ 'paymentResult.paypalOrderId': paypalOrderId }).select('_id');
+    if (existing) {
+      return res.status(409).json({ message: 'This payment is already processed' });
+    }
+
+    const paypalBase =
+      config.paypal.environment === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+    const auth = Buffer.from(`${config.paypal.clientId}:${config.paypal.clientSecret}`).toString('base64');
+    const tokenResponse = await fetch(`${paypalBase}/v1/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials'
+    });
+    const tokenData = await parseJsonSafely(tokenResponse);
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      return res.status(502).json({ message: 'Failed to connect with PayPal' });
+    }
+
+    const captureResponse = await fetch(`${paypalBase}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const captureData = await parseJsonSafely(captureResponse);
+    const amountUsd = Number(captureData?.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value || 0);
+    const amountPaise = Math.round(amountUsd * 8300);
+
+    if (!captureResponse.ok || String(captureData?.status || '').toUpperCase() !== 'COMPLETED') {
+      return res.status(400).json({ message: 'Unable to verify payment with PayPal' });
+    }
+    if (amountPaise !== expectedAmountPaise) {
+      return res.status(400).json({ message: 'Payment amount does not match order total' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.paypal,
+      status: 'paid',
+      paidAt: new Date(),
+      paymentResult: {
+        gateway: 'paypal',
+        paypalOrderId,
+        paypalCaptureId: String(captureData?.purchase_units?.[0]?.payments?.captures?.[0]?.id || '')
+      }
+    });
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+    return res.status(201).json({ message: 'Payment verified and order placed', order: saved.order });
+  }
+
+  if (gateway === 'payu') {
+    const payuTxnId = String(req.body?.payuTxnId || req.body?.txnid || '').trim();
+    const payuPaymentId = String(req.body?.payuPaymentId || req.body?.mihpayid || '').trim();
+    if (!payuTxnId) {
+      return res.status(400).json({ message: 'PayU transaction id is required' });
+    }
+
+    const existing = await Order.findOne({ 'paymentResult.payuTxnId': payuTxnId }).select('_id');
+    if (existing) {
+      return res.status(409).json({ message: 'This payment is already processed' });
+    }
+
+    const command = 'verify_payment';
+    const hash = crypto
+      .createHash('sha512')
+      .update(`${config.payu.merchantKey}|${command}|${payuTxnId}|${config.payu.merchantSalt}`)
+      .digest('hex');
+    const verifyUrl =
+      config.payu.environment === 'live'
+        ? 'https://info.payu.in/merchant/postservice?form=2'
+        : 'https://test.payu.in/merchant/postservice?form=2';
+
+    const verifyResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        key: config.payu.merchantKey,
+        command,
+        var1: payuTxnId,
+        hash
+      }).toString()
+    });
+    const verifyData = await parseJsonSafely(verifyResponse);
+    const tx = verifyData?.transaction_details?.[payuTxnId] || {};
+    if (!verifyResponse.ok || String(tx.status || '').toLowerCase() !== 'success') {
+      return res.status(400).json({ message: 'Unable to verify payment with PayU' });
+    }
+    if (Math.round(Number(tx.amt || tx.amount || 0) * 100) !== expectedAmountPaise) {
+      return res.status(400).json({ message: 'Payment amount does not match order total' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.payu,
+      status: 'paid',
+      paidAt: new Date(),
+      paymentResult: {
+        gateway: 'payu',
+        payuTxnId,
+        payuPaymentId: String(tx.mihpayid || payuPaymentId || '')
+      }
+    });
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+    return res.status(201).json({ message: 'Payment verified and order placed', order: saved.order });
+  }
+
+  if (gateway === 'cashfree') {
+    const cashfreeOrderId = String(req.body?.cashfreeOrderId || req.body?.order_id || '').trim();
+    if (!cashfreeOrderId) {
+      return res.status(400).json({ message: 'Cashfree order id is required' });
+    }
+
+    const existing = await Order.findOne({ 'paymentResult.cashfreeOrderId': cashfreeOrderId }).select('_id');
+    if (existing) {
+      return res.status(409).json({ message: 'This payment is already processed' });
+    }
+
+    const cashfreeBase =
+      config.cashfree.environment === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+    const verifyResponse = await fetch(`${cashfreeBase}/orders/${encodeURIComponent(cashfreeOrderId)}/payments`, {
+      headers: {
+        'x-api-version': '2023-08-01',
+        'x-client-id': config.cashfree.appId,
+        'x-client-secret': config.cashfree.secretKey
+      }
+    });
+    const verifyData = await parseJsonSafely(verifyResponse);
+    const payments = Array.isArray(verifyData) ? verifyData : Array.isArray(verifyData?.data) ? verifyData.data : [];
+    const successPayment = payments.find((entry) => ['SUCCESS', 'PAID'].includes(String(entry.payment_status || '').toUpperCase()));
+
+    if (!verifyResponse.ok || !successPayment) {
+      return res.status(400).json({ message: 'Unable to verify payment with Cashfree' });
+    }
+    if (Math.round(Number(successPayment.payment_amount || 0) * 100) !== expectedAmountPaise) {
+      return res.status(400).json({ message: 'Payment amount does not match order total' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.cashfree,
+      status: 'paid',
+      paidAt: new Date(),
+      paymentResult: {
+        gateway: 'cashfree',
+        cashfreeOrderId,
+        cashfreePaymentId: String(successPayment.cf_payment_id || '')
+      }
+    });
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+    return res.status(201).json({ message: 'Payment verified and order placed', order: saved.order });
+  }
+
+  if (gateway === 'phonepe') {
+    const phonepeTransactionId = String(req.body?.phonepeTransactionId || req.body?.transaction_id || '').trim();
+    if (!phonepeTransactionId) {
+      return res.status(400).json({ message: 'PhonePe transaction id is required' });
+    }
+
+    const existing = await Order.findOne({ 'paymentResult.phonepeTransactionId': phonepeTransactionId }).select('_id');
+    if (existing) {
+      return res.status(409).json({ message: 'This payment is already processed' });
+    }
+
+    const phonepeBase =
+      config.phonepe.environment === 'production'
+        ? 'https://api.phonepe.com/apis/hermes'
+        : 'https://api-preprod.phonepe.com/apis/pg-sandbox';
+    const statusPath = `/pg/v1/status/${config.phonepe.merchantId}/${phonepeTransactionId}`;
+    const checksum = `${crypto
+      .createHash('sha256')
+      .update(`${statusPath}${config.phonepe.saltKey}`)
+      .digest('hex')}###${config.phonepe.saltIndex}`;
+
+    const statusResponse = await fetch(`${phonepeBase}${statusPath}`, {
+      headers: {
+        'X-VERIFY': checksum,
+        'X-MERCHANT-ID': config.phonepe.merchantId
+      }
+    });
+    const statusData = await parseJsonSafely(statusResponse);
+    const isSuccess =
+      String(statusData?.code || '').toUpperCase() === 'PAYMENT_SUCCESS' ||
+      String(statusData?.data?.state || '').toUpperCase() === 'COMPLETED';
+
+    if (!statusResponse.ok || !isSuccess) {
+      return res.status(400).json({ message: 'Unable to verify payment with PhonePe' });
+    }
+    if (Number(statusData?.data?.amount || 0) !== expectedAmountPaise) {
+      return res.status(400).json({ message: 'Payment amount does not match order total' });
+    }
+
+    const saved = await createStoredOrder({
+      userId: req.user._id,
+      items,
+      shippingAddress,
+      paymentMethod: PAYMENT_METHOD_LABELS.phonepe,
+      status: 'paid',
+      paidAt: new Date(),
+      paymentResult: {
+        gateway: 'phonepe',
+        phonepeTransactionId,
+        phonepeTransactionReference: String(statusData?.data?.transactionId || '')
+      }
+    });
+    if (saved.error) {
+      return res.status(saved.error.status).json({ message: saved.error.message });
+    }
+    return res.status(201).json({ message: 'Payment verified and order placed', order: saved.order });
+  }
+
+  return res.status(400).json({ message: `Unsupported payment gateway: ${gateway}` });
+};
+
+const payuCallbackRedirect = async (req, res) => {
+  const clientBaseUrl = resolveClientBaseUrl(req);
+  const status = String(req.query.result || req.body?.status || '').trim().toLowerCase() === 'success' ? 'success' : 'failure';
+  const txnid = String(req.body?.txnid || '').trim();
+  const mihpayid = String(req.body?.mihpayid || '').trim();
+
+  const redirectUrl = new URL(`${clientBaseUrl}/checkout`);
+  redirectUrl.searchParams.set('gateway', 'payu');
+  redirectUrl.searchParams.set('status', status);
+  if (txnid) {
+    redirectUrl.searchParams.set('txnid', txnid);
+  }
+  if (mihpayid) {
+    redirectUrl.searchParams.set('mihpayid', mihpayid);
+  }
+
+  return res.redirect(302, redirectUrl.toString());
 };
 
 const getMyOrders = async (req, res) => {
@@ -912,6 +1845,10 @@ module.exports = {
   createOrder,
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
+  getPaymentGatewayOptions,
+  createPaymentIntent,
+  verifyPaymentAndCreateOrder,
+  payuCallbackRedirect,
   getMyOrders,
   getMyOrderById,
   getAllOrders,

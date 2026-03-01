@@ -13,7 +13,7 @@ import {
   Typography
 } from '@mui/material';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
-import api from '../api';
+import AdminSettingsSubnav from '../components/AdminSettingsSubnav';
 import PageHeader from '../components/PageHeader';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { defaultThemeSettings, fontFamilyOptions, normalizeThemeSettings } from '../theme';
@@ -40,10 +40,6 @@ const AdminSettingsPage = () => {
   const [nameDraft, setNameDraft] = useState(storeName);
   const [footerTextDraft, setFooterTextDraft] = useState(footerText);
   const [themeDraft, setThemeDraft] = useState(() => normalizeThemeSettings(themeSettings));
-  const [razorpayKeyIdDraft, setRazorpayKeyIdDraft] = useState('');
-  const [razorpayKeySecretDraft, setRazorpayKeySecretDraft] = useState('');
-  const [razorpaySecretConfigured, setRazorpaySecretConfigured] = useState(false);
-  const [loadingRazorpaySettings, setLoadingRazorpaySettings] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
@@ -53,41 +49,6 @@ const AdminSettingsPage = () => {
     setFooterTextDraft(footerText);
     setThemeDraft(normalizeThemeSettings(themeSettings));
   }, [storeName, footerText, themeSettings]);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadAdminSettings = async () => {
-      try {
-        const { data } = await api.get('/settings/admin');
-        if (!active) {
-          return;
-        }
-
-        setRazorpayKeyIdDraft(String(data?.razorpay?.keyId || '').trim());
-        setRazorpaySecretConfigured(Boolean(data?.razorpay?.keySecretConfigured));
-      } catch (requestError) {
-        if (!active) {
-          return;
-        }
-        setError(
-          requestError.response?.data?.message ||
-            requestError.message ||
-            'Failed to load Razorpay settings from admin endpoint'
-        );
-      } finally {
-        if (active) {
-          setLoadingRazorpaySettings(false);
-        }
-      }
-    };
-
-    loadAdminSettings();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const onThemeFieldChange = (field, value) => {
     setThemeDraft((current) => ({
@@ -107,23 +68,11 @@ const AdminSettingsPage = () => {
     setSaving(true);
 
     try {
-      const razorpayPayload = {
-        keyId: razorpayKeyIdDraft
-      };
-      const nextRazorpaySecret = String(razorpayKeySecretDraft || '').trim();
-      if (nextRazorpaySecret || !String(razorpayKeyIdDraft || '').trim()) {
-        razorpayPayload.keySecret = nextRazorpaySecret;
-      }
-
       const updatedSettings = await updateStoreSettings({
         storeName: nameDraft,
         footerText: footerTextDraft,
-        theme: themeDraft,
-        razorpay: razorpayPayload
+        theme: themeDraft
       });
-      setRazorpayKeyIdDraft(String(updatedSettings?.razorpay?.keyId || razorpayKeyIdDraft).trim());
-      setRazorpaySecretConfigured(Boolean(updatedSettings?.razorpay?.keySecretConfigured));
-      setRazorpayKeySecretDraft('');
       setSuccess(`Settings updated. Store name: "${updatedSettings.storeName}"`);
     } catch (requestError) {
       setError(requestError.response?.data?.message || requestError.message || 'Failed to update store settings');
@@ -139,6 +88,12 @@ const AdminSettingsPage = () => {
         title="Store Settings"
         subtitle="Update global branding and full website theme (colors + fonts)."
       />
+
+      <Card sx={{ mb: 1.2 }}>
+        <CardContent sx={{ p: 1 }}>
+          <AdminSettingsSubnav />
+        </CardContent>
+      </Card>
 
       {(error || success) && (
         <Stack spacing={0.8} sx={{ mb: 1.1 }}>
@@ -189,7 +144,13 @@ const AdminSettingsPage = () => {
               </Button>
             </Stack>
 
-            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' } }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 1,
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' }
+              }}
+            >
               {colorFieldItems.map((item) => (
                 <TextField
                   key={item.key}
@@ -233,45 +194,6 @@ const AdminSettingsPage = () => {
                 ))}
               </TextField>
             </Box>
-
-            <Divider />
-
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              Payments
-            </Typography>
-
-            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' } }}>
-              <TextField
-                label="Razorpay Key ID"
-                size="small"
-                value={razorpayKeyIdDraft}
-                onChange={(event) => setRazorpayKeyIdDraft(event.target.value)}
-                inputProps={{ maxLength: 80 }}
-                helperText="Saved in database and used while creating Razorpay orders."
-              />
-
-              <TextField
-                label="Razorpay Key Secret"
-                size="small"
-                type="password"
-                value={razorpayKeySecretDraft}
-                onChange={(event) => setRazorpayKeySecretDraft(event.target.value)}
-                autoComplete="new-password"
-                helperText={
-                  razorpaySecretConfigured
-                    ? 'Secret already configured. Enter a new one only to rotate it.'
-                    : 'No secret saved yet. Enter and save to enable Razorpay payments.'
-                }
-              />
-            </Box>
-
-            <Typography variant="caption" color="text.secondary">
-              {loadingRazorpaySettings
-                ? 'Loading Razorpay settings...'
-                : razorpaySecretConfigured
-                  ? 'Razorpay secret is currently configured.'
-                  : 'Razorpay secret is not configured.'}
-            </Typography>
 
             <Stack direction="row" spacing={0.8}>
               <Button

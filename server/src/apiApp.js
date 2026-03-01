@@ -19,6 +19,7 @@ const apiApp = express();
 
 apiApp.use(cors());
 apiApp.use(express.json({ limit: '100mb' }));
+apiApp.use(express.urlencoded({ extended: true }));
 
 if (process.env.NODE_ENV !== 'production') {
   apiApp.use(morgan('dev'));

@@ -63,9 +63,20 @@ const orderSchema = new mongoose.Schema(
       default: 'Cash on Delivery'
     },
     paymentResult: {
+      gateway: { type: String },
       razorpayOrderId: { type: String },
       razorpayPaymentId: { type: String },
-      razorpaySignature: { type: String }
+      razorpaySignature: { type: String },
+      stripeSessionId: { type: String },
+      stripePaymentIntentId: { type: String },
+      paypalOrderId: { type: String },
+      paypalCaptureId: { type: String },
+      payuTxnId: { type: String },
+      payuPaymentId: { type: String },
+      cashfreeOrderId: { type: String },
+      cashfreePaymentId: { type: String },
+      phonepeTransactionId: { type: String },
+      phonepeTransactionReference: { type: String }
     },
     paidAt: {
       type: Date

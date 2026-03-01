@@ -8,10 +8,6 @@ const defaultFooterText = 'Premium everyday clothing, delivered across India.';
 
 const normalizeStoreName = (value) => String(value || '').trim() || defaultStoreName;
 const normalizeFooterText = (value) => String(value || '').trim() || defaultFooterText;
-const normalizeRazorpaySettings = (value = {}) => ({
-  keyId: String(value.keyId || '').trim(),
-  keySecretConfigured: Boolean(value.keySecretConfigured)
-});
 
 export const StoreSettingsProvider = ({ children }) => {
   const [storeName, setStoreName] = useState(defaultStoreName);
@@ -31,8 +27,7 @@ export const StoreSettingsProvider = ({ children }) => {
     return {
       storeName: nextStoreName,
       footerText: nextFooterText,
-      theme: nextThemeSettings,
-      razorpay: normalizeRazorpaySettings(data?.razorpay || {})
+      theme: nextThemeSettings
     };
   }, []);
 
@@ -54,12 +49,7 @@ export const StoreSettingsProvider = ({ children }) => {
   }, [refreshSettings]);
 
   const updateStoreSettings = useCallback(
-    async ({
-      storeName: nextStoreName,
-      footerText: nextFooterText,
-      theme: nextTheme,
-      razorpay: nextRazorpay
-    } = {}) => {
+    async ({ storeName: nextStoreName, footerText: nextFooterText, theme: nextTheme } = {}) => {
       const payload = {};
 
       if (nextStoreName !== undefined) {
@@ -72,21 +62,6 @@ export const StoreSettingsProvider = ({ children }) => {
 
       if (nextTheme !== undefined) {
         payload.theme = normalizeThemeSettings(nextTheme);
-      }
-
-      if (nextRazorpay !== undefined) {
-        payload.razorpay = {};
-
-        if (Object.prototype.hasOwnProperty.call(nextRazorpay || {}, 'keyId')) {
-          payload.razorpay.keyId = String(nextRazorpay.keyId || '').trim();
-        }
-        if (Object.prototype.hasOwnProperty.call(nextRazorpay || {}, 'keySecret')) {
-          payload.razorpay.keySecret = String(nextRazorpay.keySecret || '');
-        }
-
-        if (Object.keys(payload.razorpay).length === 0) {
-          delete payload.razorpay;
-        }
       }
 
       const { data } = await api.put('/settings', payload);
