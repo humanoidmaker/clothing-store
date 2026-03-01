@@ -190,7 +190,7 @@ const CheckoutPage = () => {
                     label="Payment Method"
                     onChange={(event) => setPaymentMethod(event.target.value)}
                   >
-                    <MenuItem value="Razorpay">Razorpay (Test)</MenuItem>
+                    <MenuItem value="Razorpay">Razorpay</MenuItem>
                     <MenuItem value="Cash on Delivery">Cash on Delivery</MenuItem>
                   </Select>
                 </FormControl>

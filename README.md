@@ -9,7 +9,7 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
 - Profit/loss reporting with purchase price support on products and variants
 - SEO controls for default, public-page, and product-level metadata
 - Popup media library with upload, select, preview, and CRUD
-- Razorpay payment flow (test mode supported)
+- Razorpay payment flow with admin-managed credentials
 
 ## Tech Stack
 
@@ -65,8 +65,7 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
 - `PORT`: server port (default `3000`)
 - `MONGO_URI`: MongoDB connection string
 - `JWT_SECRET`: long random secret for auth tokens
-- `RAZORPAY_KEY_ID`: Razorpay key id
-- `RAZORPAY_KEY_SECRET`: Razorpay secret
+- `SETTINGS_ENCRYPTION_SECRET`: secret used to encrypt payment credentials stored in database
 - `NEXT_PUBLIC_API_URL`: API base path (default `/api`)
 
 ## Available Scripts
@@ -86,7 +85,7 @@ Change default credentials immediately in any non-local environment.
 ## Production Notes
 
 - Use HTTPS, secure secrets management, rate limits, backups, and monitoring before production use.
-- Razorpay credentials in this repo are for integration/testing; use your own production keys.
+- Configure Razorpay key id/secret in Admin > Settings (stored encrypted in database).
 - Review your regional legal, tax, and privacy compliance obligations before launch.
 
 ## Open Source License

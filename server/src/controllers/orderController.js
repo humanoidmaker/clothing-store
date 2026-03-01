@@ -2,12 +2,15 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const StoreSettings = require('../models/StoreSettings');
+const { decryptSettingValue } = require('../utils/secureSettings');
 
 const ORDER_STATUSES = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
 const PROFIT_STATUSES = ['paid', 'shipped', 'delivered'];
 const PIPELINE_STATUSES = ['pending', 'processing'];
 const REPORT_INTERVALS = ['day', 'week', 'month'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
 
 const validateShippingAddress = (shippingAddress) => {
   const requiredKeys = ['street', 'city', 'state', 'postalCode', 'country'];
@@ -294,22 +297,43 @@ const createStoredOrder = async ({
   return { order };
 };
 
-const getRazorpayClient = () => {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+const getRazorpayClient = async () => {
+  try {
+    const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('razorpay');
+    const keyId = String(settings?.razorpay?.keyId || '').trim();
+    const encryptedSecret = String(settings?.razorpay?.keySecretEncrypted || '').trim();
 
-  if (!keyId || !keySecret) {
-    return { error: { status: 500, message: 'Razorpay keys are not configured on server' } };
+    if (!keyId || !encryptedSecret) {
+      return { error: { status: 500, message: 'Razorpay keys are not configured in admin settings' } };
+    }
+
+    let keySecret = '';
+    try {
+      keySecret = decryptSettingValue(encryptedSecret);
+    } catch (decryptionError) {
+      return {
+        error: {
+          status: 500,
+          message: decryptionError.message || 'Unable to decrypt Razorpay keys from store settings'
+        }
+      };
+    }
+
+    if (!keySecret) {
+      return { error: { status: 500, message: 'Razorpay keys are not configured in admin settings' } };
+    }
+
+    return {
+      keyId,
+      keySecret,
+      client: new Razorpay({
+        key_id: keyId,
+        key_secret: keySecret
+      })
+    };
+  } catch {
+    return { error: { status: 500, message: 'Unable to load Razorpay configuration from database' } };
   }
-
-  return {
-    keyId,
-    keySecret,
-    client: new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret
-    })
-  };
 };
 
 const createOrder = async (req, res) => {
@@ -335,7 +359,7 @@ const createOrder = async (req, res) => {
 
 const createRazorpayOrder = async (req, res) => {
   const { items } = req.body;
-  const razorpay = getRazorpayClient();
+  const razorpay = await getRazorpayClient();
 
   if (razorpay.error) {
     return res.status(razorpay.error.status).json({ message: razorpay.error.message });
@@ -374,7 +398,7 @@ const createRazorpayOrder = async (req, res) => {
 
 const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
   const { items, shippingAddress, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-  const razorpay = getRazorpayClient();
+  const razorpay = await getRazorpayClient();
 
   if (razorpay.error) {
     return res.status(razorpay.error.status).json({ message: razorpay.error.message });

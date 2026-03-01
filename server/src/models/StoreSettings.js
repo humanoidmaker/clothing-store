@@ -11,6 +11,12 @@ const defaultThemeSettings = {
   headingFontFamily: 'Playfair Display'
 };
 
+const defaultRazorpaySettings = {
+  keyId: '',
+  keySecretEncrypted: '',
+  updatedAt: null
+};
+
 const storeSettingsSchema = new mongoose.Schema(
   {
     singletonKey: {
@@ -76,6 +82,23 @@ const storeSettingsSchema = new mongoose.Schema(
         default: defaultThemeSettings.headingFontFamily,
         maxlength: 80
       }
+    },
+    razorpay: {
+      keyId: {
+        type: String,
+        trim: true,
+        default: defaultRazorpaySettings.keyId,
+        maxlength: 80
+      },
+      keySecretEncrypted: {
+        type: String,
+        trim: true,
+        default: defaultRazorpaySettings.keySecretEncrypted
+      },
+      updatedAt: {
+        type: Date,
+        default: defaultRazorpaySettings.updatedAt
+      }
     }
   },
   {
@@ -84,6 +107,7 @@ const storeSettingsSchema = new mongoose.Schema(
 );
 
 storeSettingsSchema.statics.defaultThemeSettings = defaultThemeSettings;
+storeSettingsSchema.statics.defaultRazorpaySettings = defaultRazorpaySettings;
 
 module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
 
