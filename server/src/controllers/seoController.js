@@ -8,7 +8,7 @@ const {
 } = require('../utils/seo');
 
 const SINGLETON_QUERY = { singletonKey: 'default' };
-const defaultStoreName = 'Astra Attire';
+const defaultStoreName = 'Clothing Store';
 
 const ensureSeoSettings = async (storeName = defaultStoreName) => {
   let settings = await SeoSettings.findOne(SINGLETON_QUERY);
@@ -187,3 +187,4 @@ module.exports = {
   getSeoProductById,
   updateSeoProduct
 };
+

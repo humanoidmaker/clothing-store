@@ -54,7 +54,7 @@ const sampleProducts = [
     name: 'Linen Resort Shirt',
     description: 'Breathable premium linen shirt with relaxed fit for warm-weather styling.',
     image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
+    brand: 'Clothing Store',
     category: 'Shirts',
     gender: 'Men',
     sizes: ['S', 'M', 'L', 'XL'],
@@ -76,7 +76,7 @@ const sampleProducts = [
     name: 'Oversized Graphic Tee',
     description: 'Soft cotton oversized t-shirt with streetwear-inspired back print.',
     image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
+    brand: 'Clothing Store',
     category: 'T-Shirts',
     gender: 'Unisex',
     sizes: ['S', 'M', 'L', 'XL', 'XXL'],
@@ -98,7 +98,7 @@ const sampleProducts = [
     name: 'High Rise Wide-Leg Jeans',
     description: 'Structured denim jeans with a modern high-rise silhouette.',
     image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
+    brand: 'Clothing Store',
     category: 'Jeans',
     gender: 'Women',
     sizes: ['26', '28', '30', '32', '34'],
@@ -119,7 +119,7 @@ const sampleProducts = [
     name: 'Flowy Midi Dress',
     description: 'Printed midi dress with soft drape and all-day comfort.',
     image: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
+    brand: 'Clothing Store',
     category: 'Dresses',
     gender: 'Women',
     sizes: ['XS', 'S', 'M', 'L'],
@@ -140,7 +140,7 @@ const sampleProducts = [
     name: 'Athleisure Joggers',
     description: 'Tapered joggers with drawcord waist and brushed inner comfort.',
     image: 'https://images.unsplash.com/photo-1514996937319-344454492b37?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
+    brand: 'Clothing Store',
     category: 'Activewear',
     gender: 'Unisex',
     sizes: ['S', 'M', 'L', 'XL'],
@@ -162,7 +162,7 @@ const sampleProducts = [
     name: 'Classic Polo Shirt',
     description: 'Breathable pique polo suitable for casual office and weekend wear.',
     image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80',
-    brand: 'Astra Attire',
+    brand: 'Clothing Store',
     category: 'Polos',
     gender: 'Men',
     sizes: ['S', 'M', 'L', 'XL'],
@@ -219,4 +219,5 @@ const seed = async () => {
 };
 
 seed();
+
 

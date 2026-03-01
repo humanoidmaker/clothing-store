@@ -61,7 +61,7 @@ export async function generateMetadata({ params }) {
     SeoSettings.findOne({ singletonKey: 'default' }).select('defaults publicPages').lean()
   ]);
 
-  const storeName = String(storeSettings?.storeName || 'Astra Attire').trim() || 'Astra Attire';
+  const storeName = String(storeSettings?.storeName || 'Clothing Store').trim() || 'Clothing Store';
   const defaults = sanitizeSeoMeta(seoSettings?.defaults || {});
   const publicPages = mergePublicPages(seoSettings?.publicPages || [], storeName);
   const isProductDetailPage = slugSegments.length >= 2 && slugSegments[0] === 'products';
@@ -125,3 +125,4 @@ const CatchAllPage = () => {
 };
 
 export default CatchAllPage;
+

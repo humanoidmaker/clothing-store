@@ -1,7 +1,7 @@
 const DEFAULT_ROBOTS = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
 const DEFAULT_TWITTER_CARD = 'summary_large_image';
 const DEFAULT_OG_TYPE = 'website';
-const DEFAULT_SOCIAL_IMAGE = 'https://placehold.co/1200x630?text=Astra+Attire';
+const DEFAULT_SOCIAL_IMAGE = 'https://placehold.co/1200x630?text=Clothing+Store';
 const DEFAULT_SITE_URL = 'http://localhost:3000';
 
 const PREDEFINED_PUBLIC_PAGES = [
@@ -87,7 +87,7 @@ const sanitizeSeoMeta = (input = {}, fallback = defaultSeoMeta) => ({
   twitterCreator: sanitizeTwitterHandle(input.twitterCreator ?? fallback.twitterCreator)
 });
 
-const createDefaultPublicPageMeta = (page, storeName = 'Astra Attire') => {
+const createDefaultPublicPageMeta = (page, storeName = 'Clothing Store') => {
   const titleBase =
     page.key === 'home' ? `${storeName} | Premium Fashion Store` : `${page.label} | ${storeName}`;
   const descriptionBase =
@@ -107,7 +107,7 @@ const createDefaultPublicPageMeta = (page, storeName = 'Astra Attire') => {
   });
 };
 
-const buildDefaultPublicPages = (storeName = 'Astra Attire') =>
+const buildDefaultPublicPages = (storeName = 'Clothing Store') =>
   PREDEFINED_PUBLIC_PAGES.map((page) => ({
     key: page.key,
     label: page.label,
@@ -115,7 +115,7 @@ const buildDefaultPublicPages = (storeName = 'Astra Attire') =>
     meta: createDefaultPublicPageMeta(page, storeName)
   }));
 
-const mergePublicPages = (existingPages = [], storeName = 'Astra Attire') => {
+const mergePublicPages = (existingPages = [], storeName = 'Clothing Store') => {
   const defaults = buildDefaultPublicPages(storeName);
   const normalizedExisting = Array.isArray(existingPages)
     ? existingPages
@@ -172,7 +172,7 @@ const resolveSeoForRendering = ({
   imageFallback = '',
   pathname = '/',
   origin = DEFAULT_SITE_URL,
-  siteName = 'Astra Attire',
+  siteName = 'Clothing Store',
   typeFallback = DEFAULT_OG_TYPE
 }) => {
   const normalizedPrimary = sanitizeSeoMeta(meta || {});
@@ -203,7 +203,7 @@ const resolveSeoForRendering = ({
   };
 };
 
-const buildNextMetadata = (resolvedSeo, siteName = 'Astra Attire') => {
+const buildNextMetadata = (resolvedSeo, siteName = 'Clothing Store') => {
   const keywords = trimValue(resolvedSeo.keywords)
     .split(',')
     .map((keyword) => keyword.trim())
@@ -265,3 +265,4 @@ module.exports = {
   resolveSeoForRendering,
   buildNextMetadata
 };
+

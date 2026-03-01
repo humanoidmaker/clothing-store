@@ -68,10 +68,10 @@ const createVariantId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-const createInitialForm = (storeName = 'Astra Attire') => ({
+const createInitialForm = (storeName = 'Clothing Store') => ({
   name: '',
   description: '',
-  brand: String(storeName || '').trim() || 'Astra Attire',
+  brand: String(storeName || '').trim() || 'Clothing Store',
   category: 'T-Shirts',
   gender: 'Unisex',
   material: '',
@@ -1197,3 +1197,4 @@ const AdminProductsPage = () => {
 };
 
 export default AdminProductsPage;
+

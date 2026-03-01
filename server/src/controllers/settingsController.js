@@ -2,7 +2,7 @@ const StoreSettings = require('../models/StoreSettings');
 const { encryptSettingValue } = require('../utils/secureSettings');
 
 const SINGLETON_QUERY = { singletonKey: 'default' };
-const defaultStoreName = 'Astra Attire';
+const defaultStoreName = 'Clothing Store';
 const defaultFooterText = 'Premium everyday clothing, delivered across India.';
 const defaultThemeSettings = StoreSettings.defaultThemeSettings;
 const defaultPaymentGatewaySettings = StoreSettings.defaultPaymentGatewaySettings;
@@ -979,3 +979,4 @@ module.exports = {
   getAdminStoreSettings,
   updateStoreSettings
 };
+

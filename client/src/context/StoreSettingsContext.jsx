@@ -3,7 +3,7 @@ import api from '../api';
 import { defaultThemeSettings, normalizeThemeSettings } from '../theme';
 
 const StoreSettingsContext = createContext(null);
-const defaultStoreName = 'Astra Attire';
+const defaultStoreName = 'Clothing Store';
 const defaultFooterText = 'Premium everyday clothing, delivered across India.';
 const defaultShowOutOfStockProducts = false;
 const defaultAuthSecuritySettings = {
@@ -157,3 +157,4 @@ export const useStoreSettings = () => {
 
   return context;
 };
+

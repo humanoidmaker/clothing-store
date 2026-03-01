@@ -62,6 +62,39 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
    - App: `http://localhost:3000`
    - API health: `http://localhost:3000/api/health`
 
+## One-Line Server Setup (GitHub)
+
+These commands clone the full project from GitHub, install dependencies, create/update `.env` (with generated secrets), build the app, and print live step-by-step output.
+
+Linux / Ubuntu:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/humanoidmaker/clothing-store/master/scripts/bootstrap.sh | bash
+```
+
+Linux / Ubuntu with MongoDB auto-install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/humanoidmaker/clothing-store/master/scripts/bootstrap.sh | bash -s -- --install-mongodb
+```
+
+Windows Server (PowerShell as Administrator):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/humanoidmaker/clothing-store/master/scripts/bootstrap.ps1 | iex"
+```
+
+Windows Server with MongoDB auto-install:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((iwr -useb 'https://raw.githubusercontent.com/humanoidmaker/clothing-store/master/scripts/bootstrap.ps1'))) -InstallMongoDb"
+```
+
+Optional flags:
+
+- Linux: `--dir myapp --branch master --seed --skip-build --install-mongodb`
+- Windows: `-TargetDir myapp -Branch master -Seed -SkipBuild -InstallMongoDb`
+
 ## Environment Variables
 
 - `PORT`: server port (default `3000`)

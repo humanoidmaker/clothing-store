@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Astra Attire Ecommerce',
+  title: 'Clothing Store Ecommerce',
   description: 'Fashion ecommerce storefront and admin dashboard'
 };
 
@@ -14,3 +14,4 @@ const RootLayout = ({ children }) => {
 };
 
 export default RootLayout;
+

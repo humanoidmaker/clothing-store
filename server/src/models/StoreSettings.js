@@ -113,7 +113,7 @@ const storeSettingsSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      default: 'Astra Attire',
+      default: 'Clothing Store',
       maxlength: 80
     },
     footerText: {
@@ -489,4 +489,5 @@ storeSettingsSchema.statics.defaultShowOutOfStockProducts = defaultShowOutOfStoc
 storeSettingsSchema.statics.defaultAuthSecuritySettings = defaultAuthSecuritySettings;
 
 module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
+
 
