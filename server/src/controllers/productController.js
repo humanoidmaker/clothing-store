@@ -1,9 +1,11 @@
 const Product = require('../models/Product');
+const Order = require('../models/Order');
 const StoreSettings = require('../models/StoreSettings');
 const { isDataImageUrl, saveImageDataUrlToStorage } = require('../utils/mediaStorage');
 
 const defaultImage = 'https://placehold.co/600x400?text=Product';
 const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
+const REVIEW_ELIGIBLE_ORDER_STATUSES = ['paid', 'shipped', 'delivered'];
 
 const parseBooleanQueryFlag = (value) =>
   ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
@@ -81,6 +83,108 @@ const shouldIncludeOutOfStockProducts = async (req) => {
 
   const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('showOutOfStockProducts');
   return Boolean(settings?.showOutOfStockProducts);
+};
+
+const normalizeReviewComment = (value) => {
+  const comment = String(value || '').trim();
+  if (!comment) {
+    throw new Error('Review comment is required');
+  }
+  if (comment.length > 1200) {
+    throw new Error('Review comment must be 1200 characters or less');
+  }
+  return comment;
+};
+
+const normalizeReviewRating = (value) => {
+  const rating = Number(value);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    throw new Error('Rating must be a number between 1 and 5');
+  }
+  return Math.round(rating);
+};
+
+const getProductSnapshotWithoutHiddenReviews = (product) => {
+  const source = typeof product?.toObject === 'function' ? product.toObject() : { ...(product || {}) };
+  const allReviews = Array.isArray(source.reviews) ? source.reviews : [];
+  source.reviews = allReviews
+    .filter((review) => !review?.isHidden)
+    .sort((left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime())
+    .map((review) => ({
+      _id: review._id,
+      name: String(review?.name || '').trim() || 'Verified Customer',
+      rating: Number(review?.rating || 0),
+      comment: String(review?.comment || '').trim(),
+      createdAt: review?.createdAt || null,
+      updatedAt: review?.updatedAt || null
+    }));
+  return source;
+};
+
+const recalculateProductRating = (product) => {
+  const reviews = Array.isArray(product?.reviews) ? product.reviews : [];
+  const visibleReviews = reviews.filter((review) => !review?.isHidden);
+  const total = visibleReviews.reduce((sum, review) => sum + Number(review?.rating || 0), 0);
+  const count = visibleReviews.length;
+
+  product.numReviews = count;
+  product.rating = count > 0 ? Number((total / count).toFixed(1)) : 0;
+};
+
+const buildReviewPolicy = async (product, user) => {
+  const policy = {
+    isAuthenticated: Boolean(user?._id),
+    hasPurchased: false,
+    alreadyReviewed: false,
+    canSubmit: false,
+    reason: 'login_required'
+  };
+
+  if (!user?._id) {
+    return policy;
+  }
+
+  if (user.isAdmin) {
+    return {
+      ...policy,
+      reason: 'admin_account'
+    };
+  }
+
+  const userId = String(user._id);
+  const reviews = Array.isArray(product?.reviews) ? product.reviews : [];
+  const alreadyReviewed = reviews.some((review) => String(review?.user || '') === userId);
+  if (alreadyReviewed) {
+    return {
+      ...policy,
+      alreadyReviewed: true,
+      reason: 'already_reviewed'
+    };
+  }
+
+  const purchased = await Order.exists({
+    user: user._id,
+    status: { $in: REVIEW_ELIGIBLE_ORDER_STATUSES },
+    orderItems: {
+      $elemMatch: {
+        product: product._id
+      }
+    }
+  });
+
+  if (!purchased) {
+    return {
+      ...policy,
+      reason: 'purchase_required'
+    };
+  }
+
+  return {
+    ...policy,
+    hasPurchased: true,
+    canSubmit: true,
+    reason: 'eligible'
+  };
 };
 
 const normalizeList = (value) => {
@@ -381,7 +485,12 @@ const getProducts = async (req, res) => {
     .sort(sortBy[sort] || sortBy.newest)
     .skip(skip)
     .limit(limit);
-  const visibleProducts = products.map((product) => sanitizeProductForStorefront(product, includeOutOfStockProducts));
+  const visibleProducts = products.map((product) => {
+    const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
+    const source = typeof visibleProduct?.toObject === 'function' ? visibleProduct.toObject() : { ...visibleProduct };
+    delete source.reviews;
+    return source;
+  });
 
   return res.json({
     products: visibleProducts,
@@ -446,7 +555,129 @@ const getProductById = async (req, res) => {
   }
 
   const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
-  return res.json(visibleProduct);
+  const productWithPublicReviews = getProductSnapshotWithoutHiddenReviews(visibleProduct);
+  productWithPublicReviews.reviewPolicy = await buildReviewPolicy(product, req.user || null);
+  return res.json(productWithPublicReviews);
+};
+
+const createProductReview = async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  if (!product) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+
+  const reviewPolicy = await buildReviewPolicy(product, req.user);
+  if (!reviewPolicy.canSubmit) {
+    if (reviewPolicy.reason === 'already_reviewed') {
+      return res.status(409).json({ message: 'You have already reviewed this product' });
+    }
+    return res.status(403).json({ message: 'Only verified customers can review this product' });
+  }
+
+  let rating;
+  let comment;
+  try {
+    rating = normalizeReviewRating(req.body?.rating);
+    comment = normalizeReviewComment(req.body?.comment);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid review payload' });
+  }
+
+  product.reviews.push({
+    user: req.user._id,
+    name: String(req.user?.name || '').trim() || 'Verified Customer',
+    rating,
+    comment
+  });
+
+  recalculateProductRating(product);
+  await product.save();
+
+  const createdReview = product.reviews[product.reviews.length - 1];
+  return res.status(201).json({
+    message: 'Review submitted successfully',
+    review: {
+      _id: createdReview._id,
+      name: createdReview.name,
+      rating: Number(createdReview.rating || 0),
+      comment: createdReview.comment,
+      createdAt: createdReview.createdAt,
+      updatedAt: createdReview.updatedAt
+    },
+    rating: {
+      rating: Number(product.rating || 0),
+      numReviews: Number(product.numReviews || 0)
+    }
+  });
+};
+
+const getAdminProductReviews = async (_req, res) => {
+  const products = await Product.find({ 'reviews.0': { $exists: true } }).select('name image reviews');
+  const flattened = [];
+
+  for (const product of products) {
+    const productName = String(product?.name || '').trim() || 'Product';
+    const productImage = String(product?.image || '').trim();
+    const reviews = Array.isArray(product?.reviews) ? product.reviews : [];
+
+    for (const review of reviews) {
+      flattened.push({
+        productId: String(product._id),
+        productName,
+        productImage,
+        reviewId: String(review._id),
+        userId: String(review?.user || ''),
+        name: String(review?.name || '').trim() || 'Verified Customer',
+        rating: Number(review?.rating || 0),
+        comment: String(review?.comment || '').trim(),
+        isHidden: Boolean(review?.isHidden),
+        hiddenAt: review?.hiddenAt || null,
+        createdAt: review?.createdAt || null,
+        updatedAt: review?.updatedAt || null
+      });
+    }
+  }
+
+  flattened.sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+  return res.json({ reviews: flattened, total: flattened.length });
+};
+
+const setProductReviewVisibility = async (req, res) => {
+  if (typeof req.body?.hidden !== 'boolean') {
+    return res.status(400).json({ message: 'hidden must be a boolean value' });
+  }
+
+  const product = await Product.findById(req.params.productId);
+  if (!product) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+
+  const review = product.reviews.id(req.params.reviewId);
+  if (!review) {
+    return res.status(404).json({ message: 'Review not found' });
+  }
+
+  const shouldHide = Boolean(req.body.hidden);
+  review.isHidden = shouldHide;
+  review.hiddenAt = shouldHide ? new Date() : null;
+  review.hiddenBy = shouldHide ? req.user._id : null;
+
+  recalculateProductRating(product);
+  await product.save();
+
+  return res.json({
+    message: shouldHide ? 'Review hidden successfully' : 'Review is visible now',
+    review: {
+      productId: String(product._id),
+      reviewId: String(review._id),
+      isHidden: Boolean(review.isHidden),
+      hiddenAt: review.hiddenAt || null
+    },
+    rating: {
+      rating: Number(product.rating || 0),
+      numReviews: Number(product.numReviews || 0)
+    }
+  });
 };
 
 const createProduct = async (req, res) => {
@@ -599,6 +830,9 @@ module.exports = {
   getProducts,
   getProductFilterOptions,
   getProductById,
+  createProductReview,
+  getAdminProductReviews,
+  setProductReviewVisibility,
   createProduct,
   updateProduct,
   deleteProduct

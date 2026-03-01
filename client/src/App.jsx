@@ -15,6 +15,7 @@ import { WishlistProvider } from './context/WishlistContext';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminProductsPage from './pages/AdminProductsPage';
 import AdminReportsPage from './pages/AdminReportsPage';
+import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminSeoPage from './pages/AdminSeoPage';
 import AdminPaymentGatewaysPage from './pages/AdminPaymentGatewaysPage';
 import AdminAuthSecuritySettingsPage from './pages/AdminAuthSecuritySettingsPage';
@@ -116,6 +117,7 @@ const AppShell = () => {
                           <Route path="reports" element={<AdminReportsPage />} />
                           <Route path="seo" element={<AdminSeoPage />} />
                           <Route path="products" element={<AdminProductsPage />} />
+                          <Route path="reviews" element={<AdminReviewsPage />} />
                           <Route path="orders" element={<AdminOrdersPage />} />
                           <Route path="settings" element={<AdminSettingsPage />} />
                           <Route path="settings/payment-gateways" element={<AdminPaymentGatewaysPage />} />

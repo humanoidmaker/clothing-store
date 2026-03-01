@@ -5,10 +5,12 @@ import {
   ButtonBase,
   Button,
   Card,
+  CardContent,
   Chip,
   CircularProgress,
   Divider,
   MenuItem,
+  Rating,
   Stack,
   TextField,
   Typography
@@ -26,6 +28,7 @@ import PageHeader from '../components/PageHeader';
 import ProductImageViewport from '../components/ProductImageViewport';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import api from '../api';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { formatINR } from '../utils/currency';
@@ -35,6 +38,7 @@ const stripHtml = (value) => String(value || '').replace(/<[^>]*>/g, ' ').replac
 
 const ProductPage = () => {
   const { id } = useParams();
+  const { isAuthenticated, isAdmin } = useAuth();
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
@@ -46,6 +50,9 @@ const ProductPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [shareFeedback, setShareFeedback] = useState('');
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -57,6 +64,8 @@ const ProductPage = () => {
         setProduct(data);
         setQuantity(1);
         setActiveImage('');
+        setReviewRating(5);
+        setReviewComment('');
       } catch (requestError) {
         setError(requestError.response?.data?.message || 'Failed to load product');
       } finally {
@@ -231,6 +240,32 @@ const ProductPage = () => {
   ).slice(0, 280);
   const encodedUrl = encodeURIComponent(productUrl);
   const encodedText = encodeURIComponent(`${shareTitle}${shareDescription ? ` - ${shareDescription}` : ''}`);
+  const publicReviews = Array.isArray(product?.reviews) ? product.reviews : [];
+  const reviewPolicy = product?.reviewPolicy || {
+    isAuthenticated: false,
+    hasPurchased: false,
+    alreadyReviewed: false,
+    canSubmit: false,
+    reason: 'login_required'
+  };
+  const averageRating = Number(product?.rating || 0);
+  const totalReviews = Number(product?.numReviews || publicReviews.length || 0);
+  const canSubmitReview = Boolean(isAuthenticated && !isAdmin && reviewPolicy.canSubmit);
+  const reviewInfoText = (() => {
+    if (isAdmin) {
+      return 'Admin accounts cannot submit storefront reviews.';
+    }
+    if (!isAuthenticated || reviewPolicy.reason === 'login_required') {
+      return 'Login and purchase this product to submit a verified review.';
+    }
+    if (reviewPolicy.reason === 'already_reviewed') {
+      return 'You have already submitted a review for this product.';
+    }
+    if (reviewPolicy.reason === 'purchase_required') {
+      return 'Only verified customers who purchased this product can review.';
+    }
+    return '';
+  })();
 
   const setTemporaryFeedback = (message) => {
     setShareFeedback(message);
@@ -269,6 +304,48 @@ const ProductPage = () => {
   const openShareWindow = (url) => {
     if (!url) return;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const onSubmitReview = async (event) => {
+    event.preventDefault();
+    const comment = String(reviewComment || '').trim();
+    if (!comment) {
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      const { data } = await api.post(`/products/${id}/reviews`, {
+        rating: reviewRating,
+        comment
+      });
+
+      setReviewComment('');
+      setReviewRating(5);
+      setProduct((current) => {
+        if (!current) return current;
+        const existingReviews = Array.isArray(current.reviews) ? current.reviews : [];
+        const createdReview = data?.review && typeof data.review === 'object' ? data.review : null;
+
+        return {
+          ...current,
+          reviews: createdReview ? [createdReview, ...existingReviews] : existingReviews,
+          rating: Number(data?.rating?.rating ?? current.rating ?? 0),
+          numReviews: Number(data?.rating?.numReviews ?? current.numReviews ?? existingReviews.length),
+          reviewPolicy: {
+            isAuthenticated: true,
+            hasPurchased: true,
+            alreadyReviewed: true,
+            canSubmit: false,
+            reason: 'already_reviewed'
+          }
+        };
+      });
+    } catch {
+      // Error toasts are handled globally by the API interceptor.
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -357,6 +434,12 @@ const ProductPage = () => {
               </Stack>
 
               <Typography variant="h4">{product.name}</Typography>
+              <Stack direction="row" spacing={0.7} alignItems="center">
+                <Rating value={averageRating} precision={0.1} readOnly size="small" />
+                <Typography variant="body2" color="text.secondary">
+                  {totalReviews > 0 ? `${averageRating.toFixed(1)} (${totalReviews} review${totalReviews === 1 ? '' : 's'})` : 'No reviews yet'}
+                </Typography>
+              </Stack>
               <Typography
                 component="div"
                 variant="body1"
@@ -557,6 +640,79 @@ const ProductPage = () => {
                   </Button>
                 </Stack>
                 {shareFeedback ? <Alert severity="success">{shareFeedback}</Alert> : null}
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={1}>
+                <Typography variant="h6">Verified Customer Reviews</Typography>
+
+                {publicReviews.length === 0 ? (
+                  <Alert severity="info">No reviews yet for this product.</Alert>
+                ) : (
+                  <Stack spacing={0.8}>
+                    {publicReviews.map((review) => (
+                      <Card key={review._id} variant="outlined">
+                        <CardContent sx={{ p: 1 }}>
+                          <Stack spacing={0.5}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                {review.name || 'Verified Customer'}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {review.createdAt ? new Date(review.createdAt).toLocaleDateString('en-IN') : '-'}
+                              </Typography>
+                            </Stack>
+                            <Rating value={Number(review.rating || 0)} precision={0.5} readOnly size="small" />
+                            <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                              {review.comment}
+                            </Typography>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+
+                {canSubmitReview ? (
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1 }}>
+                      <Stack component="form" spacing={0.8} onSubmit={onSubmitReview}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Write a Review
+                        </Typography>
+                        <Rating
+                          value={reviewRating}
+                          precision={1}
+                          onChange={(_event, nextValue) => {
+                            if (nextValue) {
+                              setReviewRating(nextValue);
+                            }
+                          }}
+                        />
+                        <TextField
+                          required
+                          multiline
+                          minRows={3}
+                          label="Share your experience"
+                          value={reviewComment}
+                          onChange={(event) => setReviewComment(event.target.value)}
+                        />
+                        <Box>
+                          <Button
+                            type="submit"
+                            variant="contained"
+                            disabled={reviewSubmitting || !String(reviewComment || '').trim()}
+                          >
+                            {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                          </Button>
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  reviewInfoText && <Alert severity="info">{reviewInfoText}</Alert>
+                )}
               </Stack>
             </Stack>
           </Box>

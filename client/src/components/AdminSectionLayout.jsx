@@ -5,6 +5,7 @@ const adminNavItems = [
   { label: 'Reports', to: '/admin/reports' },
   { label: 'SEO', to: '/admin/seo' },
   { label: 'Products', to: '/admin/products' },
+  { label: 'Reviews', to: '/admin/reviews' },
   { label: 'Orders', to: '/admin/orders' },
   { label: 'Settings', to: '/admin/settings' }
 ];

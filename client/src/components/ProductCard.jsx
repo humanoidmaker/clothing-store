@@ -5,6 +5,7 @@ import {
   CardActions,
   CardContent,
   Chip,
+  Rating,
   Stack,
   Typography
 } from '@mui/material';
@@ -95,6 +96,13 @@ const ProductCard = ({ product }) => {
             {(product.colors || []).slice(0, 3).map((color) => (
               <Chip key={color} size="small" label={color} variant="outlined" />
             ))}
+          </Stack>
+
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
+            <Rating value={Number(product.rating || 0)} precision={0.1} readOnly size="small" />
+            <Typography variant="caption" color="text.secondary">
+              ({Number(product.numReviews || 0)})
+            </Typography>
           </Stack>
 
           <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }}>
