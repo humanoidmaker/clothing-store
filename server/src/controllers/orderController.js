@@ -65,21 +65,34 @@ const validateAddressRequiredFields = (address, requiredFields, label) => {
 };
 
 const normalizeCheckoutDetails = (payload = {}, user = {}) => {
-  const shippingAddress = normalizeAddressInput(payload.shippingAddress, {
+  const userDefaultShippingAddress = normalizeAddressInput(user?.defaultShippingAddress || {}, {
     fullName: trimOrEmpty(user?.name || ''),
-    email: trimOrEmpty(user?.email || '')
+    email: trimOrEmpty(user?.email || ''),
+    country: 'India'
   });
+  const shippingAddress = normalizeAddressInput(payload.shippingAddress, userDefaultShippingAddress);
+  if (!shippingAddress.email) {
+    shippingAddress.email = trimOrEmpty(user?.email || '');
+  }
+  if (!shippingAddress.fullName) {
+    shippingAddress.fullName = trimOrEmpty(user?.name || '');
+  }
   validateAddressRequiredFields(
     shippingAddress,
     ['fullName', 'phone', 'street', 'city', 'state', 'postalCode', 'country'],
     'Shipping address'
   );
 
-  const sameAsShipping = payload?.billingDetails?.sameAsShipping !== false;
+  const hasBillingSameAsShipping = Object.prototype.hasOwnProperty.call(payload?.billingDetails || {}, 'sameAsShipping');
+  const sameAsShipping = hasBillingSameAsShipping
+    ? payload?.billingDetails?.sameAsShipping !== false
+    : user?.defaultBillingDetails?.sameAsShipping !== false;
+  const userDefaultBillingAddress = normalizeAddressInput(user?.defaultBillingDetails || {}, userDefaultShippingAddress);
   const billingAddress = sameAsShipping
     ? normalizeAddressInput(shippingAddress)
     : normalizeAddressInput(payload?.billingDetails || {}, {
-        email: shippingAddress.email
+        ...userDefaultBillingAddress,
+        email: shippingAddress.email || userDefaultBillingAddress.email
       });
   validateAddressRequiredFields(
     billingAddress,
@@ -87,14 +100,19 @@ const normalizeCheckoutDetails = (payload = {}, user = {}) => {
     'Billing details'
   );
 
-  const businessPurchase = Boolean(payload?.taxDetails?.businessPurchase);
+  const defaultTaxDetails = user?.defaultTaxDetails && typeof user.defaultTaxDetails === 'object' ? user.defaultTaxDetails : {};
+  const taxPayload = payload?.taxDetails && typeof payload.taxDetails === 'object' ? payload.taxDetails : {};
+  const businessPurchase =
+    Object.prototype.hasOwnProperty.call(taxPayload, 'businessPurchase')
+      ? Boolean(taxPayload.businessPurchase)
+      : Boolean(defaultTaxDetails.businessPurchase);
   const taxDetails = {
     businessPurchase,
-    businessName: trimOrEmpty(payload?.taxDetails?.businessName || ''),
-    gstin: trimOrEmpty(payload?.taxDetails?.gstin || '').toUpperCase(),
-    pan: trimOrEmpty(payload?.taxDetails?.pan || '').toUpperCase(),
-    purchaseOrderNumber: trimOrEmpty(payload?.taxDetails?.purchaseOrderNumber || ''),
-    notes: trimOrEmpty(payload?.taxDetails?.notes || '')
+    businessName: trimOrEmpty(taxPayload.businessName ?? defaultTaxDetails.businessName ?? ''),
+    gstin: trimOrEmpty(taxPayload.gstin ?? defaultTaxDetails.gstin ?? '').toUpperCase(),
+    pan: trimOrEmpty(taxPayload.pan ?? defaultTaxDetails.pan ?? '').toUpperCase(),
+    purchaseOrderNumber: trimOrEmpty(taxPayload.purchaseOrderNumber ?? defaultTaxDetails.purchaseOrderNumber ?? ''),
+    notes: trimOrEmpty(taxPayload.notes ?? defaultTaxDetails.notes ?? '')
   };
 
   if (businessPurchase && !taxDetails.gstin) {

@@ -26,6 +26,9 @@ import OrderInvoicePage from './pages/OrderInvoicePage';
 import OrdersPage from './pages/OrdersPage';
 import ProductPage from './pages/ProductPage';
 import RegisterPage from './pages/RegisterPage';
+import UserAccountSettingsPage from './pages/UserAccountSettingsPage';
+import UserBillingProfileSettingsPage from './pages/UserBillingProfileSettingsPage';
+import UserSettingsLayout from './pages/UserSettingsLayout';
 import WishlistPage from './pages/WishlistPage';
 import { createAppTheme } from './theme';
 
@@ -84,6 +87,18 @@ const AppShell = () => {
                             </ProtectedRoute>
                           )}
                         />
+                        <Route
+                          path="/settings"
+                          element={(
+                            <ProtectedRoute>
+                              <UserSettingsLayout />
+                            </ProtectedRoute>
+                          )}
+                        >
+                          <Route index element={<Navigate to="account" replace />} />
+                          <Route path="account" element={<UserAccountSettingsPage />} />
+                          <Route path="billing-profile" element={<UserBillingProfileSettingsPage />} />
+                        </Route>
                         <Route
                           path="/admin"
                           element={(

@@ -69,6 +69,7 @@ const Navbar = () => {
       { label: 'Cart', to: '/cart' }
     ];
     if (user) links.push({ label: 'My Orders', to: '/orders' });
+    if (user) links.push({ label: 'My Settings', to: '/settings' });
     if (isAdmin) links.push({ label: 'Admin', to: '/admin' });
     return links;
   }, [user, isAdmin]);
@@ -126,6 +127,11 @@ const Navbar = () => {
               {user && (
                 <Box component={NavLink} to="/orders" sx={navLinkSx}>
                   Orders
+                </Box>
+              )}
+              {user && (
+                <Box component={NavLink} to="/settings" sx={navLinkSx}>
+                  Settings
                 </Box>
               )}
               {isAdmin && (
@@ -199,7 +205,16 @@ const Navbar = () => {
 
               {user && (
                 <>
-                  <Typography variant="caption" sx={{ color: 'common.white', display: { xs: 'none', sm: 'inline' } }}>
+                  <Typography
+                    component={RouterLink}
+                    to="/settings"
+                    variant="caption"
+                    sx={{
+                      color: 'common.white',
+                      textDecoration: 'none',
+                      display: { xs: 'none', sm: 'inline' }
+                    }}
+                  >
                     {user.name}
                   </Typography>
                   <IconButton onClick={logout} sx={{ color: 'common.white', display: { xs: 'none', sm: 'inline-flex' } }} size="small">

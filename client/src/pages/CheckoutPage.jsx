@@ -95,6 +95,51 @@ const submitPostForm = (actionUrl, fields = {}) => {
   form.submit();
 };
 
+const normalizeText = (value) => String(value || '').trim();
+const normalizeAddressForForm = (value = {}, fallback = {}) => ({
+  fullName: normalizeText(value.fullName ?? fallback.fullName ?? ''),
+  phone: normalizeText(value.phone ?? fallback.phone ?? ''),
+  email: normalizeText(value.email ?? fallback.email ?? ''),
+  street: normalizeText(value.street ?? fallback.street ?? ''),
+  addressLine2: normalizeText(value.addressLine2 ?? fallback.addressLine2 ?? ''),
+  city: normalizeText(value.city ?? fallback.city ?? ''),
+  state: normalizeText(value.state ?? fallback.state ?? ''),
+  postalCode: normalizeText(value.postalCode ?? fallback.postalCode ?? ''),
+  country: normalizeText(value.country ?? fallback.country ?? 'India') || 'India'
+});
+
+const createCheckoutFormFromUser = (user) => {
+  const shippingDefaults = normalizeAddressForForm(user?.defaultShippingAddress || {}, {
+    fullName: normalizeText(user?.name || ''),
+    email: normalizeText(user?.email || ''),
+    country: 'India'
+  });
+  const billingSameAsShipping = user?.defaultBillingDetails?.sameAsShipping !== false;
+  const billingDefaults = billingSameAsShipping
+    ? normalizeAddressForForm(shippingDefaults, shippingDefaults)
+    : normalizeAddressForForm(user?.defaultBillingDetails || {}, {
+        email: shippingDefaults.email,
+        country: shippingDefaults.country || 'India'
+      });
+
+  return {
+    shipping: shippingDefaults,
+    billing: {
+      sameAsShipping: billingSameAsShipping,
+      ...billingDefaults
+    },
+    tax: {
+      businessPurchase: Boolean(user?.defaultTaxDetails?.businessPurchase),
+      businessName: normalizeText(user?.defaultTaxDetails?.businessName || ''),
+      gstin: normalizeText(user?.defaultTaxDetails?.gstin || ''),
+      pan: normalizeText(user?.defaultTaxDetails?.pan || ''),
+      purchaseOrderNumber: normalizeText(user?.defaultTaxDetails?.purchaseOrderNumber || ''),
+      notes: normalizeText(user?.defaultTaxDetails?.notes || '')
+    },
+    codChargesAccepted: false
+  };
+};
+
 const CheckoutPage = () => {
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
@@ -109,40 +154,7 @@ const CheckoutPage = () => {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedGateway, setSelectedGateway] = useState('');
   const [codChargePerProduct, setCodChargePerProduct] = useState(DEFAULT_COD_CHARGE_PER_PRODUCT);
-  const [form, setForm] = useState({
-    shipping: {
-      fullName: '',
-      phone: '',
-      email: String(user?.email || ''),
-      street: '',
-      addressLine2: '',
-      city: '',
-      state: '',
-      postalCode: '',
-      country: 'India'
-    },
-    billing: {
-      sameAsShipping: true,
-      fullName: '',
-      phone: '',
-      email: '',
-      street: '',
-      addressLine2: '',
-      city: '',
-      state: '',
-      postalCode: '',
-      country: 'India'
-    },
-    tax: {
-      businessPurchase: false,
-      businessName: '',
-      gstin: '',
-      pan: '',
-      purchaseOrderNumber: '',
-      notes: ''
-    },
-    codChargesAccepted: false
-  });
+  const [form, setForm] = useState(() => createCheckoutFormFromUser(user));
 
   const {
     page,
@@ -231,6 +243,20 @@ const CheckoutPage = () => {
       }
     }));
   };
+
+  useEffect(() => {
+    const defaultForm = createCheckoutFormFromUser(user);
+    setForm((current) => {
+      const hasTypedData =
+        Boolean(normalizeText(current?.shipping?.street)) ||
+        Boolean(normalizeText(current?.shipping?.city)) ||
+        Boolean(normalizeText(current?.shipping?.postalCode)) ||
+        Boolean(normalizeText(current?.billing?.street)) ||
+        Boolean(normalizeText(current?.tax?.gstin));
+
+      return hasTypedData ? current : defaultForm;
+    });
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
