@@ -13,8 +13,20 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
 const DEFAULT_PAYMENT_GATEWAYS = StoreSettings.defaultPaymentGatewaySettings || {
   cashOnDelivery: { enabled: true },
-  razorpay: { enabled: true, keyId: '', keySecretEncrypted: '', updatedAt: null },
-  stripe: { enabled: false, publishableKey: '', secretKeyEncrypted: '', webhookSecretEncrypted: '', updatedAt: null },
+  razorpay: {
+    enabled: true,
+    mode: 'test',
+    test: { keyId: '', keySecretEncrypted: '' },
+    live: { keyId: '', keySecretEncrypted: '' },
+    updatedAt: null
+  },
+  stripe: {
+    enabled: false,
+    mode: 'test',
+    test: { publishableKey: '', secretKeyEncrypted: '', webhookSecretEncrypted: '' },
+    live: { publishableKey: '', secretKeyEncrypted: '', webhookSecretEncrypted: '' },
+    updatedAt: null
+  },
   paypal: { enabled: false, clientId: '', clientSecretEncrypted: '', environment: 'sandbox', updatedAt: null },
   payu: { enabled: false, merchantKey: '', merchantSaltEncrypted: '', environment: 'test', updatedAt: null },
   cashfree: { enabled: false, appId: '', secretKeyEncrypted: '', environment: 'sandbox', updatedAt: null },
@@ -318,16 +330,12 @@ const createStoredOrder = async ({
 const getRazorpayClient = async () => {
   try {
     const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
-    const paymentGateways = settings?.paymentGateways || {};
-    const keyId =
-      String(paymentGateways?.razorpay?.keyId || '').trim() || String(settings?.razorpay?.keyId || '').trim();
-    const encryptedSecret =
-      String(paymentGateways?.razorpay?.keySecretEncrypted || '').trim() ||
-      String(settings?.razorpay?.keySecretEncrypted || '').trim();
-    const enabled =
-      typeof paymentGateways?.razorpay?.enabled === 'boolean' ? Boolean(paymentGateways.razorpay.enabled) : true;
+    const normalized = normalizeStoredGatewaySettings(settings || {});
+    const activeRazorpayConfig = normalized.razorpay.mode === 'live' ? normalized.razorpay.live : normalized.razorpay.test;
+    const keyId = String(activeRazorpayConfig?.keyId || '').trim();
+    const encryptedSecret = String(activeRazorpayConfig?.keySecretEncrypted || '').trim();
 
-    if (!enabled || !keyId || !encryptedSecret) {
+    if (!normalized.razorpay.enabled || !keyId || !encryptedSecret) {
       return { error: { status: 500, message: 'Razorpay keys are not configured in admin settings' } };
     }
 
@@ -355,8 +363,8 @@ const getRazorpayClient = async () => {
         key_secret: keySecret
       })
     };
-  } catch {
-    return { error: { status: 500, message: 'Unable to load Razorpay configuration from database' } };
+  } catch (error) {
+    return { error: { status: 500, message: error.message || 'Unable to load Razorpay configuration from database' } };
   }
 };
 
@@ -514,6 +522,12 @@ const normalizeStoredGatewaySettings = (settingsDoc = {}) => {
   const defaults = cloneGatewayDefaults();
   const stored = settingsDoc?.paymentGateways || {};
   const legacyRazorpay = settingsDoc?.razorpay || {};
+  const razorpayMode = ['test', 'live'].includes(String(stored?.razorpay?.mode || '').trim().toLowerCase())
+    ? String(stored.razorpay.mode).trim().toLowerCase()
+    : defaults.razorpay.mode;
+  const stripeMode = ['test', 'live'].includes(String(stored?.stripe?.mode || '').trim().toLowerCase())
+    ? String(stored.stripe.mode).trim().toLowerCase()
+    : defaults.stripe.mode;
 
   const normalized = {
     cashOnDelivery: {
@@ -524,14 +538,36 @@ const normalizeStoredGatewaySettings = (settingsDoc = {}) => {
     },
     razorpay: {
       enabled: typeof stored?.razorpay?.enabled === 'boolean' ? stored.razorpay.enabled : defaults.razorpay.enabled,
-      keyId: String(stored?.razorpay?.keyId || '').trim(),
-      keySecretEncrypted: String(stored?.razorpay?.keySecretEncrypted || '').trim(),
+      mode: razorpayMode,
+      test: {
+        keyId: String(stored?.razorpay?.test?.keyId || stored?.razorpay?.keyId || '').trim(),
+        keySecretEncrypted: String(
+          stored?.razorpay?.test?.keySecretEncrypted || stored?.razorpay?.keySecretEncrypted || ''
+        ).trim()
+      },
+      live: {
+        keyId: String(stored?.razorpay?.live?.keyId || '').trim(),
+        keySecretEncrypted: String(stored?.razorpay?.live?.keySecretEncrypted || '').trim()
+      },
       updatedAt: stored?.razorpay?.updatedAt || null
     },
     stripe: {
       enabled: typeof stored?.stripe?.enabled === 'boolean' ? stored.stripe.enabled : defaults.stripe.enabled,
-      publishableKey: String(stored?.stripe?.publishableKey || '').trim(),
-      keySecretEncrypted: String(stored?.stripe?.secretKeyEncrypted || '').trim(),
+      mode: stripeMode,
+      test: {
+        publishableKey: String(stored?.stripe?.test?.publishableKey || stored?.stripe?.publishableKey || '').trim(),
+        secretKeyEncrypted: String(
+          stored?.stripe?.test?.secretKeyEncrypted || stored?.stripe?.secretKeyEncrypted || ''
+        ).trim(),
+        webhookSecretEncrypted: String(
+          stored?.stripe?.test?.webhookSecretEncrypted || stored?.stripe?.webhookSecretEncrypted || ''
+        ).trim()
+      },
+      live: {
+        publishableKey: String(stored?.stripe?.live?.publishableKey || '').trim(),
+        secretKeyEncrypted: String(stored?.stripe?.live?.secretKeyEncrypted || '').trim(),
+        webhookSecretEncrypted: String(stored?.stripe?.live?.webhookSecretEncrypted || '').trim()
+      },
       updatedAt: stored?.stripe?.updatedAt || null
     },
     paypal: {
@@ -577,11 +613,11 @@ const normalizeStoredGatewaySettings = (settingsDoc = {}) => {
     }
   };
 
-  if (!normalized.razorpay.keyId) {
-    normalized.razorpay.keyId = String(legacyRazorpay?.keyId || '').trim();
+  if (!normalized.razorpay.test.keyId) {
+    normalized.razorpay.test.keyId = String(legacyRazorpay?.keyId || '').trim();
   }
-  if (!normalized.razorpay.keySecretEncrypted) {
-    normalized.razorpay.keySecretEncrypted = String(legacyRazorpay?.keySecretEncrypted || '').trim();
+  if (!normalized.razorpay.test.keySecretEncrypted) {
+    normalized.razorpay.test.keySecretEncrypted = String(legacyRazorpay?.keySecretEncrypted || '').trim();
   }
 
   return normalized;
@@ -607,6 +643,8 @@ const decryptSecret = (encryptedValue) => {
 const loadPaymentGatewayConfig = async () => {
   const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
   const normalized = normalizeStoredGatewaySettings(settings || {});
+  const activeRazorpayConfig = normalized.razorpay.mode === 'live' ? normalized.razorpay.live : normalized.razorpay.test;
+  const activeStripeConfig = normalized.stripe.mode === 'live' ? normalized.stripe.live : normalized.stripe.test;
 
   return {
     cashOnDelivery: {
@@ -614,15 +652,18 @@ const loadPaymentGatewayConfig = async () => {
     },
     razorpay: {
       enabled: Boolean(normalized.razorpay.enabled),
-      keyId: normalized.razorpay.keyId,
-      keySecret: decryptSecret(normalized.razorpay.keySecretEncrypted),
-      configured: Boolean(normalized.razorpay.keyId && normalized.razorpay.keySecretEncrypted)
+      mode: normalized.razorpay.mode,
+      keyId: activeRazorpayConfig.keyId,
+      keySecret: decryptSecret(activeRazorpayConfig.keySecretEncrypted),
+      configured: Boolean(activeRazorpayConfig.keyId && activeRazorpayConfig.keySecretEncrypted)
     },
     stripe: {
       enabled: Boolean(normalized.stripe.enabled),
-      publishableKey: normalized.stripe.publishableKey,
-      secretKey: decryptSecret(normalized.stripe.keySecretEncrypted),
-      configured: Boolean(normalized.stripe.publishableKey && normalized.stripe.keySecretEncrypted)
+      mode: normalized.stripe.mode,
+      publishableKey: activeStripeConfig.publishableKey,
+      secretKey: decryptSecret(activeStripeConfig.secretKeyEncrypted),
+      webhookSecret: decryptSecret(activeStripeConfig.webhookSecretEncrypted),
+      configured: Boolean(activeStripeConfig.publishableKey && activeStripeConfig.secretKeyEncrypted)
     },
     paypal: {
       enabled: Boolean(normalized.paypal.enabled),
@@ -676,25 +717,60 @@ const getPaymentGatewayOptions = async (req, res) => {
 
   const methods = [];
   if (config.cashOnDelivery.enabled) {
-    methods.push({ id: 'cash_on_delivery', label: PAYMENT_METHOD_LABELS.cash_on_delivery, flow: 'direct' });
+    methods.push({
+      id: 'cash_on_delivery',
+      label: PAYMENT_METHOD_LABELS.cash_on_delivery,
+      flow: 'direct',
+      configured: true
+    });
   }
-  if (config.razorpay.enabled && config.razorpay.configured) {
-    methods.push({ id: 'razorpay', label: PAYMENT_METHOD_LABELS.razorpay, flow: 'razorpay_popup' });
+  if (config.razorpay.enabled) {
+    methods.push({
+      id: 'razorpay',
+      label: PAYMENT_METHOD_LABELS.razorpay,
+      flow: 'razorpay_popup',
+      configured: Boolean(config.razorpay.configured)
+    });
   }
-  if (config.stripe.enabled && config.stripe.configured) {
-    methods.push({ id: 'stripe', label: PAYMENT_METHOD_LABELS.stripe, flow: 'redirect' });
+  if (config.stripe.enabled) {
+    methods.push({
+      id: 'stripe',
+      label: PAYMENT_METHOD_LABELS.stripe,
+      flow: 'redirect',
+      configured: Boolean(config.stripe.configured)
+    });
   }
-  if (config.paypal.enabled && config.paypal.configured) {
-    methods.push({ id: 'paypal', label: PAYMENT_METHOD_LABELS.paypal, flow: 'redirect' });
+  if (config.paypal.enabled) {
+    methods.push({
+      id: 'paypal',
+      label: PAYMENT_METHOD_LABELS.paypal,
+      flow: 'redirect',
+      configured: Boolean(config.paypal.configured)
+    });
   }
-  if (config.payu.enabled && config.payu.configured) {
-    methods.push({ id: 'payu', label: PAYMENT_METHOD_LABELS.payu, flow: 'form_post' });
+  if (config.payu.enabled) {
+    methods.push({
+      id: 'payu',
+      label: PAYMENT_METHOD_LABELS.payu,
+      flow: 'form_post',
+      configured: Boolean(config.payu.configured)
+    });
   }
-  if (config.cashfree.enabled && config.cashfree.configured) {
-    methods.push({ id: 'cashfree', label: PAYMENT_METHOD_LABELS.cashfree, flow: 'redirect' });
+  if (config.cashfree.enabled) {
+    methods.push({
+      id: 'cashfree',
+      label: PAYMENT_METHOD_LABELS.cashfree,
+      flow: 'redirect',
+      configured: Boolean(config.cashfree.configured)
+    });
   }
-  if (config.phonepe.enabled && config.phonepe.configured) {
-    methods.push({ id: 'phonepe', label: PAYMENT_METHOD_LABELS.phonepe, flow: 'redirect' });
+  if (config.phonepe.enabled) {
+    methods.push({
+      id: 'phonepe',
+      label: PAYMENT_METHOD_LABELS.phonepe,
+      flow: 'redirect',
+      configured: Boolean(config.phonepe.configured)
+    });
   }
 
   return res.json({ methods });

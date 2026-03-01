@@ -68,6 +68,13 @@ const normalizePaymentGatewaysInput = (value = {}, legacyRazorpay = {}) => {
   const defaults = cloneGatewayDefaults();
   const gateways = value && typeof value === 'object' ? value : {};
 
+  const razorpayMode = ['test', 'live'].includes(String(gateways?.razorpay?.mode || '').trim().toLowerCase())
+    ? String(gateways.razorpay.mode).trim().toLowerCase()
+    : defaults.razorpay.mode;
+  const stripeMode = ['test', 'live'].includes(String(gateways?.stripe?.mode || '').trim().toLowerCase())
+    ? String(gateways.stripe.mode).trim().toLowerCase()
+    : defaults.stripe.mode;
+
   const normalized = {
     cashOnDelivery: {
       enabled:
@@ -78,15 +85,36 @@ const normalizePaymentGatewaysInput = (value = {}, legacyRazorpay = {}) => {
     razorpay: {
       enabled:
         typeof gateways?.razorpay?.enabled === 'boolean' ? gateways.razorpay.enabled : defaults.razorpay.enabled,
-      keyId: String(gateways?.razorpay?.keyId || '').trim(),
-      keySecretEncrypted: String(gateways?.razorpay?.keySecretEncrypted || '').trim(),
+      mode: razorpayMode,
+      test: {
+        keyId: String(gateways?.razorpay?.test?.keyId || gateways?.razorpay?.keyId || '').trim(),
+        keySecretEncrypted: String(
+          gateways?.razorpay?.test?.keySecretEncrypted || gateways?.razorpay?.keySecretEncrypted || ''
+        ).trim()
+      },
+      live: {
+        keyId: String(gateways?.razorpay?.live?.keyId || '').trim(),
+        keySecretEncrypted: String(gateways?.razorpay?.live?.keySecretEncrypted || '').trim()
+      },
       updatedAt: gateways?.razorpay?.updatedAt || null
     },
     stripe: {
       enabled: typeof gateways?.stripe?.enabled === 'boolean' ? gateways.stripe.enabled : defaults.stripe.enabled,
-      publishableKey: String(gateways?.stripe?.publishableKey || '').trim(),
-      secretKeyEncrypted: String(gateways?.stripe?.secretKeyEncrypted || '').trim(),
-      webhookSecretEncrypted: String(gateways?.stripe?.webhookSecretEncrypted || '').trim(),
+      mode: stripeMode,
+      test: {
+        publishableKey: String(gateways?.stripe?.test?.publishableKey || gateways?.stripe?.publishableKey || '').trim(),
+        secretKeyEncrypted: String(
+          gateways?.stripe?.test?.secretKeyEncrypted || gateways?.stripe?.secretKeyEncrypted || ''
+        ).trim(),
+        webhookSecretEncrypted: String(
+          gateways?.stripe?.test?.webhookSecretEncrypted || gateways?.stripe?.webhookSecretEncrypted || ''
+        ).trim()
+      },
+      live: {
+        publishableKey: String(gateways?.stripe?.live?.publishableKey || '').trim(),
+        secretKeyEncrypted: String(gateways?.stripe?.live?.secretKeyEncrypted || '').trim(),
+        webhookSecretEncrypted: String(gateways?.stripe?.live?.webhookSecretEncrypted || '').trim()
+      },
       updatedAt: gateways?.stripe?.updatedAt || null
     },
     paypal: {
@@ -135,11 +163,11 @@ const normalizePaymentGatewaysInput = (value = {}, legacyRazorpay = {}) => {
   // Migration from legacy top-level Razorpay fields.
   const legacyKeyId = String(legacyRazorpay?.keyId || '').trim();
   const legacySecretEncrypted = String(legacyRazorpay?.keySecretEncrypted || '').trim();
-  if (!normalized.razorpay.keyId && legacyKeyId) {
-    normalized.razorpay.keyId = legacyKeyId;
+  if (!normalized.razorpay.test.keyId && legacyKeyId) {
+    normalized.razorpay.test.keyId = legacyKeyId;
   }
-  if (!normalized.razorpay.keySecretEncrypted && legacySecretEncrypted) {
-    normalized.razorpay.keySecretEncrypted = legacySecretEncrypted;
+  if (!normalized.razorpay.test.keySecretEncrypted && legacySecretEncrypted) {
+    normalized.razorpay.test.keySecretEncrypted = legacySecretEncrypted;
     if (!normalized.razorpay.updatedAt && legacyRazorpay?.updatedAt) {
       normalized.razorpay.updatedAt = legacyRazorpay.updatedAt;
     }
@@ -150,21 +178,36 @@ const normalizePaymentGatewaysInput = (value = {}, legacyRazorpay = {}) => {
 
 const normalizePaymentGatewaysOutput = (value = {}) => {
   const normalized = normalizePaymentGatewaysInput(value);
+  const razorpayActive = normalized.razorpay.mode === 'live' ? normalized.razorpay.live : normalized.razorpay.test;
+  const stripeActive = normalized.stripe.mode === 'live' ? normalized.stripe.live : normalized.stripe.test;
+
   return {
     cashOnDelivery: {
       enabled: Boolean(normalized.cashOnDelivery.enabled)
     },
     razorpay: {
       enabled: Boolean(normalized.razorpay.enabled),
-      keyId: normalized.razorpay.keyId,
-      keySecretConfigured: Boolean(normalized.razorpay.keySecretEncrypted),
+      mode: normalized.razorpay.mode,
+      testKeyId: normalized.razorpay.test.keyId,
+      liveKeyId: normalized.razorpay.live.keyId,
+      testKeySecretConfigured: Boolean(normalized.razorpay.test.keySecretEncrypted),
+      liveKeySecretConfigured: Boolean(normalized.razorpay.live.keySecretEncrypted),
+      keyId: razorpayActive.keyId,
+      keySecretConfigured: Boolean(razorpayActive.keySecretEncrypted),
       updatedAt: normalized.razorpay.updatedAt || null
     },
     stripe: {
       enabled: Boolean(normalized.stripe.enabled),
-      publishableKey: normalized.stripe.publishableKey,
-      secretKeyConfigured: Boolean(normalized.stripe.secretKeyEncrypted),
-      webhookSecretConfigured: Boolean(normalized.stripe.webhookSecretEncrypted),
+      mode: normalized.stripe.mode,
+      testPublishableKey: normalized.stripe.test.publishableKey,
+      livePublishableKey: normalized.stripe.live.publishableKey,
+      testSecretKeyConfigured: Boolean(normalized.stripe.test.secretKeyEncrypted),
+      liveSecretKeyConfigured: Boolean(normalized.stripe.live.secretKeyEncrypted),
+      testWebhookSecretConfigured: Boolean(normalized.stripe.test.webhookSecretEncrypted),
+      liveWebhookSecretConfigured: Boolean(normalized.stripe.live.webhookSecretEncrypted),
+      publishableKey: stripeActive.publishableKey,
+      secretKeyConfigured: Boolean(stripeActive.secretKeyEncrypted),
+      webhookSecretConfigured: Boolean(stripeActive.webhookSecretEncrypted),
       updatedAt: normalized.stripe.updatedAt || null
     },
     paypal: {
@@ -318,29 +361,76 @@ const applyPaymentGatewayUpdates = (currentSettings, payload) => {
     const razorpay = ensureObjectPayload(source.razorpay, 'Razorpay');
     maybeSetEnabled(next.razorpay, razorpay);
 
-    if (Object.prototype.hasOwnProperty.call(razorpay, 'keyId')) {
-      next.razorpay.keyId = trimWithLength(razorpay.keyId, 'Razorpay key id', 120);
-      if (!next.razorpay.keyId) {
-        next.razorpay.keySecretEncrypted = '';
-        next.razorpay.updatedAt = null;
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'mode')) {
+      const mode = String(razorpay.mode || '').trim().toLowerCase();
+      if (!['test', 'live'].includes(mode)) {
+        throw new Error('Razorpay mode must be either test or live');
       }
+      next.razorpay.mode = mode;
     }
 
-    if (Object.prototype.hasOwnProperty.call(razorpay, 'keySecret')) {
-      const keySecret = String(razorpay.keySecret || '').trim();
-      if (!keySecret) {
-        next.razorpay.keySecretEncrypted = '';
-        next.razorpay.updatedAt = null;
-      } else {
-        if (!next.razorpay.keyId) {
-          throw new Error('Razorpay key id is required before saving secret');
-        }
-        if (keySecret.length > 240) {
-          throw new Error('Razorpay key secret must be 240 characters or less');
-        }
-        next.razorpay.keySecretEncrypted = encryptSettingValue(keySecret);
-        next.razorpay.updatedAt = now;
+    const razorpayTest = razorpay?.test && typeof razorpay.test === 'object' ? razorpay.test : null;
+    const razorpayLive = razorpay?.live && typeof razorpay.live === 'object' ? razorpay.live : null;
+    const activeRazorpayMode = next.razorpay.mode === 'live' ? 'live' : 'test';
+    const activeRazorpayConfig = next.razorpay[activeRazorpayMode];
+
+    const setRazorpayKeyId = (target, incomingValue, label) => {
+      target.keyId = trimWithLength(incomingValue, label, 120);
+      if (!target.keyId) {
+        target.keySecretEncrypted = '';
       }
+    };
+
+    if (razorpayTest && Object.prototype.hasOwnProperty.call(razorpayTest, 'keyId')) {
+      setRazorpayKeyId(next.razorpay.test, razorpayTest.keyId, 'Razorpay test key id');
+    }
+    if (razorpayLive && Object.prototype.hasOwnProperty.call(razorpayLive, 'keyId')) {
+      setRazorpayKeyId(next.razorpay.live, razorpayLive.keyId, 'Razorpay live key id');
+    }
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'testKeyId')) {
+      setRazorpayKeyId(next.razorpay.test, razorpay.testKeyId, 'Razorpay test key id');
+    }
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'liveKeyId')) {
+      setRazorpayKeyId(next.razorpay.live, razorpay.liveKeyId, 'Razorpay live key id');
+    }
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'keyId')) {
+      setRazorpayKeyId(activeRazorpayConfig, razorpay.keyId, `Razorpay ${activeRazorpayMode} key id`);
+    }
+
+    const setRazorpaySecret = (target, incomingValue, label) => {
+      const keySecret = String(incomingValue || '').trim();
+      if (!keySecret) {
+        target.keySecretEncrypted = '';
+        return;
+      }
+      if (!target.keyId) {
+        throw new Error(`${label} key id is required before saving secret`);
+      }
+      if (keySecret.length > 240) {
+        throw new Error(`${label} key secret must be 240 characters or less`);
+      }
+      target.keySecretEncrypted = encryptSettingValue(keySecret);
+      next.razorpay.updatedAt = now;
+    };
+
+    if (razorpayTest && Object.prototype.hasOwnProperty.call(razorpayTest, 'keySecret')) {
+      setRazorpaySecret(next.razorpay.test, razorpayTest.keySecret, 'Razorpay test');
+    }
+    if (razorpayLive && Object.prototype.hasOwnProperty.call(razorpayLive, 'keySecret')) {
+      setRazorpaySecret(next.razorpay.live, razorpayLive.keySecret, 'Razorpay live');
+    }
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'testKeySecret')) {
+      setRazorpaySecret(next.razorpay.test, razorpay.testKeySecret, 'Razorpay test');
+    }
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'liveKeySecret')) {
+      setRazorpaySecret(next.razorpay.live, razorpay.liveKeySecret, 'Razorpay live');
+    }
+    if (Object.prototype.hasOwnProperty.call(razorpay, 'keySecret')) {
+      setRazorpaySecret(activeRazorpayConfig, razorpay.keySecret, `Razorpay ${activeRazorpayMode}`);
+    }
+
+    if (!next.razorpay.test.keySecretEncrypted && !next.razorpay.live.keySecretEncrypted) {
+      next.razorpay.updatedAt = null;
     }
   }
 
@@ -348,34 +438,104 @@ const applyPaymentGatewayUpdates = (currentSettings, payload) => {
     const stripe = ensureObjectPayload(source.stripe, 'Stripe');
     maybeSetEnabled(next.stripe, stripe);
 
+    if (Object.prototype.hasOwnProperty.call(stripe, 'mode')) {
+      const mode = String(stripe.mode || '').trim().toLowerCase();
+      if (!['test', 'live'].includes(mode)) {
+        throw new Error('Stripe mode must be either test or live');
+      }
+      next.stripe.mode = mode;
+    }
+
+    const stripeTest = stripe?.test && typeof stripe.test === 'object' ? stripe.test : null;
+    const stripeLive = stripe?.live && typeof stripe.live === 'object' ? stripe.live : null;
+    const activeStripeMode = next.stripe.mode === 'live' ? 'live' : 'test';
+    const activeStripeConfig = next.stripe[activeStripeMode];
+
+    const setStripePublishableKey = (target, incomingValue, label) => {
+      target.publishableKey = trimWithLength(incomingValue, `${label} publishable key`, 180);
+    };
+
+    if (stripeTest && Object.prototype.hasOwnProperty.call(stripeTest, 'publishableKey')) {
+      setStripePublishableKey(next.stripe.test, stripeTest.publishableKey, 'Stripe test');
+    }
+    if (stripeLive && Object.prototype.hasOwnProperty.call(stripeLive, 'publishableKey')) {
+      setStripePublishableKey(next.stripe.live, stripeLive.publishableKey, 'Stripe live');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'testPublishableKey')) {
+      setStripePublishableKey(next.stripe.test, stripe.testPublishableKey, 'Stripe test');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'livePublishableKey')) {
+      setStripePublishableKey(next.stripe.live, stripe.livePublishableKey, 'Stripe live');
+    }
     if (Object.prototype.hasOwnProperty.call(stripe, 'publishableKey')) {
-      next.stripe.publishableKey = trimWithLength(stripe.publishableKey, 'Stripe publishable key', 180);
+      setStripePublishableKey(activeStripeConfig, stripe.publishableKey, `Stripe ${activeStripeMode}`);
     }
 
-    if (Object.prototype.hasOwnProperty.call(stripe, 'secretKey')) {
-      const secretKey = String(stripe.secretKey || '').trim();
+    const setStripeSecret = (target, incomingValue, label) => {
+      const secretKey = String(incomingValue || '').trim();
       if (!secretKey) {
-        next.stripe.secretKeyEncrypted = '';
-      } else {
-        if (secretKey.length > 240) {
-          throw new Error('Stripe secret key must be 240 characters or less');
-        }
-        next.stripe.secretKeyEncrypted = encryptSettingValue(secretKey);
-        next.stripe.updatedAt = now;
+        target.secretKeyEncrypted = '';
+        return;
       }
+      if (secretKey.length > 240) {
+        throw new Error(`${label} secret key must be 240 characters or less`);
+      }
+      target.secretKeyEncrypted = encryptSettingValue(secretKey);
+      next.stripe.updatedAt = now;
+    };
+
+    if (stripeTest && Object.prototype.hasOwnProperty.call(stripeTest, 'secretKey')) {
+      setStripeSecret(next.stripe.test, stripeTest.secretKey, 'Stripe test');
+    }
+    if (stripeLive && Object.prototype.hasOwnProperty.call(stripeLive, 'secretKey')) {
+      setStripeSecret(next.stripe.live, stripeLive.secretKey, 'Stripe live');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'testSecretKey')) {
+      setStripeSecret(next.stripe.test, stripe.testSecretKey, 'Stripe test');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'liveSecretKey')) {
+      setStripeSecret(next.stripe.live, stripe.liveSecretKey, 'Stripe live');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'secretKey')) {
+      setStripeSecret(activeStripeConfig, stripe.secretKey, `Stripe ${activeStripeMode}`);
     }
 
-    if (Object.prototype.hasOwnProperty.call(stripe, 'webhookSecret')) {
-      const webhookSecret = String(stripe.webhookSecret || '').trim();
+    const setStripeWebhookSecret = (target, incomingValue, label) => {
+      const webhookSecret = String(incomingValue || '').trim();
       if (!webhookSecret) {
-        next.stripe.webhookSecretEncrypted = '';
-      } else {
-        if (webhookSecret.length > 240) {
-          throw new Error('Stripe webhook secret must be 240 characters or less');
-        }
-        next.stripe.webhookSecretEncrypted = encryptSettingValue(webhookSecret);
-        next.stripe.updatedAt = now;
+        target.webhookSecretEncrypted = '';
+        return;
       }
+      if (webhookSecret.length > 240) {
+        throw new Error(`${label} webhook secret must be 240 characters or less`);
+      }
+      target.webhookSecretEncrypted = encryptSettingValue(webhookSecret);
+      next.stripe.updatedAt = now;
+    };
+
+    if (stripeTest && Object.prototype.hasOwnProperty.call(stripeTest, 'webhookSecret')) {
+      setStripeWebhookSecret(next.stripe.test, stripeTest.webhookSecret, 'Stripe test');
+    }
+    if (stripeLive && Object.prototype.hasOwnProperty.call(stripeLive, 'webhookSecret')) {
+      setStripeWebhookSecret(next.stripe.live, stripeLive.webhookSecret, 'Stripe live');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'testWebhookSecret')) {
+      setStripeWebhookSecret(next.stripe.test, stripe.testWebhookSecret, 'Stripe test');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'liveWebhookSecret')) {
+      setStripeWebhookSecret(next.stripe.live, stripe.liveWebhookSecret, 'Stripe live');
+    }
+    if (Object.prototype.hasOwnProperty.call(stripe, 'webhookSecret')) {
+      setStripeWebhookSecret(activeStripeConfig, stripe.webhookSecret, `Stripe ${activeStripeMode}`);
+    }
+
+    if (
+      !next.stripe.test.secretKeyEncrypted &&
+      !next.stripe.live.secretKeyEncrypted &&
+      !next.stripe.test.webhookSecretEncrypted &&
+      !next.stripe.live.webhookSecretEncrypted
+    ) {
+      next.stripe.updatedAt = null;
     }
   }
 

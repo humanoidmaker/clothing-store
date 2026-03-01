@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -18,15 +18,17 @@ import {
 } from '@mui/material';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import AppPagination from '../components/AppPagination';
 import PageHeader from '../components/PageHeader';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
+
+const PENDING_PAYMENT_STORAGE_KEY = 'checkout_pending_payment_v1';
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -43,15 +45,66 @@ const loadRazorpayScript = () =>
     document.body.appendChild(script);
   });
 
+const savePendingPayment = (pending) => {
+  try {
+    sessionStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, JSON.stringify(pending));
+  } catch {
+    // Ignore storage failures; verification will ask user to retry.
+  }
+};
+
+const loadPendingPayment = () => {
+  try {
+    const raw = sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const clearPendingPayment = () => {
+  try {
+    sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const submitPostForm = (actionUrl, fields = {}) => {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = actionUrl;
+  form.style.display = 'none';
+
+  Object.entries(fields).forEach(([key, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = String(value ?? '');
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+};
+
 const CheckoutPage = () => {
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
   const { storeName } = useStoreSettings();
   const navigate = useNavigate();
+  const location = useLocation();
 
+  const [loadingMethods, setLoadingMethods] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [verifyingRedirect, setVerifyingRedirect] = useState(false);
   const [error, setError] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Razorpay');
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [selectedGateway, setSelectedGateway] = useState('');
   const [form, setForm] = useState({
     street: '',
     city: '',
@@ -70,10 +123,137 @@ const CheckoutPage = () => {
   } = usePaginationState(items, 5);
 
   const canCheckout = useMemo(() => items.length > 0, [items.length]);
+  const selectedMethod = useMemo(
+    () => paymentMethods.find((entry) => entry.id === selectedGateway) || null,
+    [paymentMethods, selectedGateway]
+  );
+
+  const buildCheckoutPayload = () => ({
+    items: items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      selectedSize: item.selectedSize,
+      selectedColor: item.selectedColor
+    })),
+    shippingAddress: form
+  });
 
   const onChange = (event) => {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGatewayOptions = async () => {
+      setLoadingMethods(true);
+      setError('');
+      try {
+        const { data } = await api.get('/orders/payment/options');
+        const methods = Array.isArray(data?.methods) ? data.methods : [];
+        if (!cancelled) {
+          setPaymentMethods(methods);
+          setSelectedGateway((current) => {
+            if (current && methods.some((entry) => entry.id === current)) {
+              return current;
+            }
+            const firstConfigured = methods.find((entry) => entry.configured !== false);
+            return firstConfigured?.id || methods[0]?.id || '';
+          });
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setError(requestError.response?.data?.message || requestError.message || 'Failed to load payment methods');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingMethods(false);
+        }
+      }
+    };
+
+    void loadGatewayOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams(location.search);
+    const gatewayFromQuery = String(params.get('gateway') || '').trim().toLowerCase();
+    if (!gatewayFromQuery) {
+      return undefined;
+    }
+
+    const cancelledPayment = params.get('cancelled') === '1';
+    const status = String(params.get('status') || '').trim().toLowerCase();
+    if (cancelledPayment || status === 'failure') {
+      setError('Payment was cancelled or failed. Please try again.');
+      clearPendingPayment();
+      navigate('/checkout', { replace: true });
+      return undefined;
+    }
+
+    if (!['stripe', 'paypal', 'payu', 'cashfree', 'phonepe'].includes(gatewayFromQuery)) {
+      navigate('/checkout', { replace: true });
+      return undefined;
+    }
+
+    const pending = loadPendingPayment();
+    const pendingGateway = String(pending?.gateway || '').trim().toLowerCase();
+    if (!pending || !pending.payload || pendingGateway !== gatewayFromQuery) {
+      setError('Unable to verify payment because pending checkout details were not found. Please retry checkout.');
+      navigate('/checkout', { replace: true });
+      return undefined;
+    }
+
+    const verifyBody = {
+      gateway: gatewayFromQuery,
+      ...pending.payload
+    };
+
+    if (gatewayFromQuery === 'stripe') {
+      verifyBody.stripeSessionId = String(params.get('session_id') || '').trim();
+    } else if (gatewayFromQuery === 'paypal') {
+      verifyBody.paypalOrderId = String(params.get('token') || '').trim();
+    } else if (gatewayFromQuery === 'payu') {
+      verifyBody.payuTxnId = String(params.get('txnid') || '').trim();
+      verifyBody.payuPaymentId = String(params.get('mihpayid') || '').trim();
+    } else if (gatewayFromQuery === 'cashfree') {
+      verifyBody.cashfreeOrderId = String(params.get('order_id') || '').trim();
+    } else if (gatewayFromQuery === 'phonepe') {
+      verifyBody.phonepeTransactionId = String(params.get('transaction_id') || '').trim();
+    }
+
+    const verifyRedirectPayment = async () => {
+      setVerifyingRedirect(true);
+      setError('');
+      try {
+        await api.post('/orders/payment/verify', verifyBody);
+        clearPendingPayment();
+        clearCart();
+        navigate('/orders', { replace: true });
+      } catch (requestError) {
+        clearPendingPayment();
+        if (!cancelled) {
+          setError(requestError.response?.data?.message || requestError.message || 'Could not verify payment');
+          navigate('/checkout', { replace: true });
+        }
+      } finally {
+        if (!cancelled) {
+          setVerifyingRedirect(false);
+        }
+      }
+    };
+
+    void verifyRedirectPayment();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, navigate, clearCart]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -82,25 +262,67 @@ const CheckoutPage = () => {
       setError('Your cart is empty');
       return;
     }
+    if (!selectedGateway) {
+      setError('Please select a payment method');
+      return;
+    }
+    if (selectedMethod && selectedMethod.configured === false) {
+      setError('Selected gateway is enabled but not fully configured in admin settings.');
+      return;
+    }
 
     setError('');
     setSubmitting(true);
 
     try {
-      const payload = {
-        items: items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          selectedSize: item.selectedSize,
-          selectedColor: item.selectedColor
-        })),
-        shippingAddress: form
-      };
+      const payload = buildCheckoutPayload();
+      const { data } = await api.post('/orders/payment/initiate', {
+        gateway: selectedGateway,
+        ...payload
+      });
 
-      if (paymentMethod === 'Cash on Delivery') {
-        await api.post('/orders', {
+      if (data?.flow === 'direct') {
+        clearCart();
+        navigate('/orders');
+        return;
+      }
+
+      if (data?.flow === 'razorpay_popup') {
+        const scriptLoaded = await loadRazorpayScript();
+        if (!scriptLoaded) {
+          throw new Error('Razorpay SDK failed to load. Check internet connection.');
+        }
+
+        const paymentResult = await new Promise((resolve, reject) => {
+          const rzp = new window.Razorpay({
+            key: data.keyId,
+            amount: data.amount,
+            currency: data.currency,
+            name: storeName,
+            description: 'Fashion order payment',
+            order_id: data.orderId,
+            handler: (response) => resolve(response),
+            prefill: {
+              name: user?.name || '',
+              email: user?.email || ''
+            },
+            theme: {
+              color: '#172b4d'
+            },
+            modal: {
+              ondismiss: () => reject(new Error('Payment cancelled'))
+            }
+          });
+
+          rzp.open();
+        });
+
+        await api.post('/orders/payment/verify', {
+          gateway: 'razorpay',
           ...payload,
-          paymentMethod: 'Cash on Delivery'
+          razorpayOrderId: paymentResult.razorpay_order_id,
+          razorpayPaymentId: paymentResult.razorpay_payment_id,
+          razorpaySignature: paymentResult.razorpay_signature
         });
 
         clearCart();
@@ -108,45 +330,29 @@ const CheckoutPage = () => {
         return;
       }
 
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded) {
-        throw new Error('Razorpay SDK failed to load. Check internet connection.');
-      }
-
-      const { data } = await api.post('/orders/razorpay/order', payload);
-      const paymentResult = await new Promise((resolve, reject) => {
-        const rzp = new window.Razorpay({
-          key: data.keyId,
-          amount: data.amount,
-          currency: data.currency,
-          name: storeName,
-          description: 'Fashion order payment',
-          order_id: data.orderId,
-          handler: (response) => resolve(response),
-          prefill: {
-            name: user?.name || '',
-            email: user?.email || ''
-          },
-          theme: {
-            color: '#172b4d'
-          },
-          modal: {
-            ondismiss: () => reject(new Error('Payment cancelled'))
-          }
+      if (data?.flow === 'redirect' || data?.flow === 'form_post') {
+        savePendingPayment({
+          gateway: selectedGateway,
+          payload,
+          createdAt: Date.now()
         });
 
-        rzp.open();
-      });
+        if (data.flow === 'redirect') {
+          if (!data.redirectUrl) {
+            throw new Error('Payment redirection URL was not provided by gateway');
+          }
+          window.location.assign(data.redirectUrl);
+          return;
+        }
 
-      await api.post('/orders/razorpay/verify', {
-        ...payload,
-        razorpayOrderId: paymentResult.razorpay_order_id,
-        razorpayPaymentId: paymentResult.razorpay_payment_id,
-        razorpaySignature: paymentResult.razorpay_signature
-      });
+        if (!data.actionUrl || !data.fields) {
+          throw new Error('Payment form details were not provided by gateway');
+        }
+        submitPostForm(data.actionUrl, data.fields);
+        return;
+      }
 
-      clearCart();
-      navigate('/orders');
+      throw new Error('Unsupported payment flow from server');
     } catch (requestError) {
       setError(requestError.response?.data?.message || requestError.message || 'Could not place order');
     } finally {
@@ -167,7 +373,7 @@ const CheckoutPage = () => {
       <PageHeader
         eyebrow="Checkout"
         title="Shipping and Payment"
-        subtitle="Securely complete your order with Razorpay or Cash on Delivery."
+        subtitle="Securely complete your order using any enabled payment gateway."
       />
 
       <Box
@@ -186,12 +392,16 @@ const CheckoutPage = () => {
                   <InputLabel id="payment-method-label">Payment Method</InputLabel>
                   <Select
                     labelId="payment-method-label"
-                    value={paymentMethod}
+                    value={selectedGateway}
                     label="Payment Method"
-                    onChange={(event) => setPaymentMethod(event.target.value)}
+                    onChange={(event) => setSelectedGateway(event.target.value)}
+                    disabled={loadingMethods || verifyingRedirect || paymentMethods.length === 0}
                   >
-                    <MenuItem value="Razorpay">Razorpay</MenuItem>
-                    <MenuItem value="Cash on Delivery">Cash on Delivery</MenuItem>
+                    {paymentMethods.map((method) => (
+                      <MenuItem key={method.id} value={method.id} disabled={method.configured === false}>
+                        {method.configured === false ? `${method.label} (Not configured)` : method.label}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>
@@ -225,21 +435,49 @@ const CheckoutPage = () => {
                 {error}
               </Alert>
             )}
+            {!loadingMethods && paymentMethods.length === 0 && (
+              <Alert severity="warning" sx={{ mt: 1.2 }}>
+                No payment gateway is available right now. Please contact support.
+              </Alert>
+            )}
+            {verifyingRedirect && (
+              <Alert severity="info" sx={{ mt: 1.2 }}>
+                Verifying payment with gateway...
+              </Alert>
+            )}
+            {selectedMethod && selectedMethod.configured === false && (
+              <Alert severity="warning" sx={{ mt: 1.2 }}>
+                Selected gateway is enabled but not configured yet. Add API keys in admin settings to use it.
+              </Alert>
+            )}
 
             <Button
               type="submit"
               variant="contained"
               sx={{ mt: 1.2 }}
               startIcon={
-                submitting
+                submitting || verifyingRedirect
                   ? <CircularProgress size={14} color="inherit" />
-                  : paymentMethod === 'Razorpay'
+                  : selectedMethod?.id !== 'cash_on_delivery'
                     ? <CreditCardOutlinedIcon />
                     : <LocalShippingOutlinedIcon />
               }
-              disabled={submitting}
+              disabled={
+                submitting ||
+                loadingMethods ||
+                verifyingRedirect ||
+                !selectedGateway ||
+                paymentMethods.length === 0 ||
+                selectedMethod?.configured === false
+              }
             >
-              {submitting ? 'Processing...' : paymentMethod === 'Razorpay' ? 'Pay with Razorpay' : 'Place Order'}
+              {submitting || verifyingRedirect
+                ? 'Processing...'
+                : selectedMethod?.id === 'cash_on_delivery'
+                  ? 'Place Order'
+                  : selectedMethod?.label
+                    ? `Pay with ${selectedMethod.label}`
+                    : 'Continue'}
             </Button>
           </CardContent>
         </Card>
@@ -286,4 +524,3 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
-

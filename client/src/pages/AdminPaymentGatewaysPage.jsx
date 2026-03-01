@@ -21,8 +21,17 @@ import PageHeader from '../components/PageHeader';
 
 const defaultGatewayState = {
   cashOnDelivery: { enabled: true },
-  razorpay: { enabled: true, keyId: '', keySecret: '' },
-  stripe: { enabled: false, publishableKey: '', secretKey: '', webhookSecret: '' },
+  razorpay: { enabled: true, mode: 'test', testKeyId: '', liveKeyId: '', testKeySecret: '', liveKeySecret: '' },
+  stripe: {
+    enabled: false,
+    mode: 'test',
+    testPublishableKey: '',
+    livePublishableKey: '',
+    testSecretKey: '',
+    liveSecretKey: '',
+    testWebhookSecret: '',
+    liveWebhookSecret: ''
+  },
   paypal: { enabled: false, clientId: '', clientSecret: '', environment: 'sandbox' },
   payu: { enabled: false, merchantKey: '', merchantSalt: '', environment: 'test' },
   cashfree: { enabled: false, appId: '', secretKey: '', environment: 'sandbox' },
@@ -30,8 +39,13 @@ const defaultGatewayState = {
 };
 
 const defaultConfiguredState = {
-  razorpay: { keySecretConfigured: false },
-  stripe: { secretKeyConfigured: false, webhookSecretConfigured: false },
+  razorpay: { testKeySecretConfigured: false, liveKeySecretConfigured: false },
+  stripe: {
+    testSecretKeyConfigured: false,
+    liveSecretKeyConfigured: false,
+    testWebhookSecretConfigured: false,
+    liveWebhookSecretConfigured: false
+  },
   paypal: { clientSecretConfigured: false },
   payu: { merchantSaltConfigured: false },
   cashfree: { secretKeyConfigured: false },
@@ -55,14 +69,21 @@ const AdminPaymentGatewaysPage = () => {
       },
       razorpay: {
         enabled: Boolean(gateways?.razorpay?.enabled),
-        keyId: String(gateways?.razorpay?.keyId || ''),
-        keySecret: ''
+        mode: String(gateways?.razorpay?.mode || 'test'),
+        testKeyId: String(gateways?.razorpay?.testKeyId || ''),
+        liveKeyId: String(gateways?.razorpay?.liveKeyId || ''),
+        testKeySecret: '',
+        liveKeySecret: ''
       },
       stripe: {
         enabled: Boolean(gateways?.stripe?.enabled),
-        publishableKey: String(gateways?.stripe?.publishableKey || ''),
-        secretKey: '',
-        webhookSecret: ''
+        mode: String(gateways?.stripe?.mode || 'test'),
+        testPublishableKey: String(gateways?.stripe?.testPublishableKey || ''),
+        livePublishableKey: String(gateways?.stripe?.livePublishableKey || ''),
+        testSecretKey: '',
+        liveSecretKey: '',
+        testWebhookSecret: '',
+        liveWebhookSecret: ''
       },
       paypal: {
         enabled: Boolean(gateways?.paypal?.enabled),
@@ -93,11 +114,14 @@ const AdminPaymentGatewaysPage = () => {
 
     setConfigured({
       razorpay: {
-        keySecretConfigured: Boolean(gateways?.razorpay?.keySecretConfigured)
+        testKeySecretConfigured: Boolean(gateways?.razorpay?.testKeySecretConfigured),
+        liveKeySecretConfigured: Boolean(gateways?.razorpay?.liveKeySecretConfigured)
       },
       stripe: {
-        secretKeyConfigured: Boolean(gateways?.stripe?.secretKeyConfigured),
-        webhookSecretConfigured: Boolean(gateways?.stripe?.webhookSecretConfigured)
+        testSecretKeyConfigured: Boolean(gateways?.stripe?.testSecretKeyConfigured),
+        liveSecretKeyConfigured: Boolean(gateways?.stripe?.liveSecretKeyConfigured),
+        testWebhookSecretConfigured: Boolean(gateways?.stripe?.testWebhookSecretConfigured),
+        liveWebhookSecretConfigured: Boolean(gateways?.stripe?.liveWebhookSecretConfigured)
       },
       paypal: {
         clientSecretConfigured: Boolean(gateways?.paypal?.clientSecretConfigured)
@@ -155,11 +179,15 @@ const AdminPaymentGatewaysPage = () => {
           },
           razorpay: {
             enabled: Boolean(form.razorpay.enabled),
-            keyId: String(form.razorpay.keyId || '').trim()
+            mode: String(form.razorpay.mode || 'test'),
+            testKeyId: String(form.razorpay.testKeyId || '').trim(),
+            liveKeyId: String(form.razorpay.liveKeyId || '').trim()
           },
           stripe: {
             enabled: Boolean(form.stripe.enabled),
-            publishableKey: String(form.stripe.publishableKey || '').trim()
+            mode: String(form.stripe.mode || 'test'),
+            testPublishableKey: String(form.stripe.testPublishableKey || '').trim(),
+            livePublishableKey: String(form.stripe.livePublishableKey || '').trim()
           },
           paypal: {
             enabled: Boolean(form.paypal.enabled),
@@ -185,18 +213,30 @@ const AdminPaymentGatewaysPage = () => {
         }
       };
 
-      const razorpaySecret = String(form.razorpay.keySecret || '').trim();
-      if (razorpaySecret) {
-        payload.paymentGateways.razorpay.keySecret = razorpaySecret;
+      const razorpayTestSecret = String(form.razorpay.testKeySecret || '').trim();
+      if (razorpayTestSecret) {
+        payload.paymentGateways.razorpay.testKeySecret = razorpayTestSecret;
+      }
+      const razorpayLiveSecret = String(form.razorpay.liveKeySecret || '').trim();
+      if (razorpayLiveSecret) {
+        payload.paymentGateways.razorpay.liveKeySecret = razorpayLiveSecret;
       }
 
-      const stripeSecret = String(form.stripe.secretKey || '').trim();
-      if (stripeSecret) {
-        payload.paymentGateways.stripe.secretKey = stripeSecret;
+      const stripeTestSecret = String(form.stripe.testSecretKey || '').trim();
+      if (stripeTestSecret) {
+        payload.paymentGateways.stripe.testSecretKey = stripeTestSecret;
       }
-      const stripeWebhook = String(form.stripe.webhookSecret || '').trim();
-      if (stripeWebhook) {
-        payload.paymentGateways.stripe.webhookSecret = stripeWebhook;
+      const stripeLiveSecret = String(form.stripe.liveSecretKey || '').trim();
+      if (stripeLiveSecret) {
+        payload.paymentGateways.stripe.liveSecretKey = stripeLiveSecret;
+      }
+      const stripeTestWebhook = String(form.stripe.testWebhookSecret || '').trim();
+      if (stripeTestWebhook) {
+        payload.paymentGateways.stripe.testWebhookSecret = stripeTestWebhook;
+      }
+      const stripeLiveWebhook = String(form.stripe.liveWebhookSecret || '').trim();
+      if (stripeLiveWebhook) {
+        payload.paymentGateways.stripe.liveWebhookSecret = stripeLiveWebhook;
       }
 
       const paypalSecret = String(form.paypal.clientSecret || '').trim();
@@ -228,6 +268,21 @@ const AdminPaymentGatewaysPage = () => {
       setSaving(false);
     }
   };
+
+  const razorpayEnvironment = form.razorpay.mode === 'live' ? 'live' : 'test';
+  const stripeEnvironment = form.stripe.mode === 'live' ? 'live' : 'test';
+  const razorpaySecretConfigured =
+    razorpayEnvironment === 'live'
+      ? configured.razorpay.liveKeySecretConfigured
+      : configured.razorpay.testKeySecretConfigured;
+  const stripeSecretConfigured =
+    stripeEnvironment === 'live'
+      ? configured.stripe.liveSecretKeyConfigured
+      : configured.stripe.testSecretKeyConfigured;
+  const stripeWebhookConfigured =
+    stripeEnvironment === 'live'
+      ? configured.stripe.liveWebhookSecretConfigured
+      : configured.stripe.testWebhookSecretConfigured;
 
   return (
     <Box>
@@ -283,19 +338,44 @@ const AdminPaymentGatewaysPage = () => {
                 }
                 label="Enable Razorpay"
               />
+              <TextField
+                select
+                label="Environment"
+                value={form.razorpay.mode}
+                onChange={(event) => updateGateway('razorpay', 'mode', event.target.value)}
+                sx={{ maxWidth: 220 }}
+              >
+                <MenuItem value="test">Test</MenuItem>
+                <MenuItem value="live">Live</MenuItem>
+              </TextField>
+              <Typography variant="body2" color="text.secondary">
+                Checkout uses {razorpayEnvironment} Razorpay credentials.
+              </Typography>
               <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' } }}>
-                <TextField label="Key ID" value={form.razorpay.keyId} onChange={(event) => updateGateway('razorpay', 'keyId', event.target.value)} />
                 <TextField
-                  label="Key Secret"
-                  type="password"
-                  value={form.razorpay.keySecret}
-                  onChange={(event) => updateGateway('razorpay', 'keySecret', event.target.value)}
-                  autoComplete="new-password"
-                  helperText={
-                    configured.razorpay.keySecretConfigured
-                      ? 'Secret already saved. Enter again only to rotate.'
-                      : 'No secret saved.'
+                  label={`${razorpayEnvironment === 'live' ? 'Live' : 'Test'} Key ID`}
+                  value={razorpayEnvironment === 'live' ? form.razorpay.liveKeyId : form.razorpay.testKeyId}
+                  onChange={(event) =>
+                    updateGateway(
+                      'razorpay',
+                      razorpayEnvironment === 'live' ? 'liveKeyId' : 'testKeyId',
+                      event.target.value
+                    )
                   }
+                />
+                <TextField
+                  label={`${razorpayEnvironment === 'live' ? 'Live' : 'Test'} Key Secret`}
+                  type="password"
+                  value={razorpayEnvironment === 'live' ? form.razorpay.liveKeySecret : form.razorpay.testKeySecret}
+                  onChange={(event) =>
+                    updateGateway(
+                      'razorpay',
+                      razorpayEnvironment === 'live' ? 'liveKeySecret' : 'testKeySecret',
+                      event.target.value
+                    )
+                  }
+                  autoComplete="new-password"
+                  helperText={razorpaySecretConfigured ? 'Secret configured.' : 'No secret saved.'}
                 />
               </Box>
 
@@ -308,30 +388,59 @@ const AdminPaymentGatewaysPage = () => {
                 control={<Switch checked={form.stripe.enabled} onChange={(event) => updateGateway('stripe', 'enabled', event.target.checked)} />}
                 label="Enable Stripe"
               />
+              <TextField
+                select
+                label="Environment"
+                value={form.stripe.mode}
+                onChange={(event) => updateGateway('stripe', 'mode', event.target.value)}
+                sx={{ maxWidth: 220 }}
+              >
+                <MenuItem value="test">Test</MenuItem>
+                <MenuItem value="live">Live</MenuItem>
+              </TextField>
+              <Typography variant="body2" color="text.secondary">
+                Checkout uses {stripeEnvironment} Stripe credentials.
+              </Typography>
               <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' } }}>
                 <TextField
-                  label="Publishable Key"
-                  value={form.stripe.publishableKey}
-                  onChange={(event) => updateGateway('stripe', 'publishableKey', event.target.value)}
+                  label={`${stripeEnvironment === 'live' ? 'Live' : 'Test'} Publishable Key`}
+                  value={stripeEnvironment === 'live' ? form.stripe.livePublishableKey : form.stripe.testPublishableKey}
+                  onChange={(event) =>
+                    updateGateway(
+                      'stripe',
+                      stripeEnvironment === 'live' ? 'livePublishableKey' : 'testPublishableKey',
+                      event.target.value
+                    )
+                  }
                 />
                 <TextField
-                  label="Secret Key"
+                  label={`${stripeEnvironment === 'live' ? 'Live' : 'Test'} Secret Key`}
                   type="password"
-                  value={form.stripe.secretKey}
-                  onChange={(event) => updateGateway('stripe', 'secretKey', event.target.value)}
+                  value={stripeEnvironment === 'live' ? form.stripe.liveSecretKey : form.stripe.testSecretKey}
+                  onChange={(event) =>
+                    updateGateway(
+                      'stripe',
+                      stripeEnvironment === 'live' ? 'liveSecretKey' : 'testSecretKey',
+                      event.target.value
+                    )
+                  }
                   autoComplete="new-password"
-                  helperText={configured.stripe.secretKeyConfigured ? 'Secret configured.' : 'No secret saved.'}
+                  helperText={stripeSecretConfigured ? 'Secret configured.' : 'No secret saved.'}
                 />
                 <TextField
-                  label="Webhook Secret"
+                  label={`${stripeEnvironment === 'live' ? 'Live' : 'Test'} Webhook Secret`}
                   type="password"
-                  value={form.stripe.webhookSecret}
-                  onChange={(event) => updateGateway('stripe', 'webhookSecret', event.target.value)}
+                  value={stripeEnvironment === 'live' ? form.stripe.liveWebhookSecret : form.stripe.testWebhookSecret}
+                  onChange={(event) =>
+                    updateGateway(
+                      'stripe',
+                      stripeEnvironment === 'live' ? 'liveWebhookSecret' : 'testWebhookSecret',
+                      event.target.value
+                    )
+                  }
                   autoComplete="new-password"
                   helperText={
-                    configured.stripe.webhookSecretConfigured
-                      ? 'Webhook secret configured.'
-                      : 'Optional unless webhook is used.'
+                    stripeWebhookConfigured ? 'Webhook secret configured.' : 'Optional unless webhook is used.'
                   }
                 />
               </Box>

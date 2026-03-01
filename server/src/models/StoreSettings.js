@@ -23,15 +23,30 @@ const defaultPaymentGatewaySettings = {
   },
   razorpay: {
     enabled: true,
-    keyId: '',
-    keySecretEncrypted: '',
+    mode: 'test',
+    test: {
+      keyId: '',
+      keySecretEncrypted: ''
+    },
+    live: {
+      keyId: '',
+      keySecretEncrypted: ''
+    },
     updatedAt: null
   },
   stripe: {
     enabled: false,
-    publishableKey: '',
-    secretKeyEncrypted: '',
-    webhookSecretEncrypted: '',
+    mode: 'test',
+    test: {
+      publishableKey: '',
+      secretKeyEncrypted: '',
+      webhookSecretEncrypted: ''
+    },
+    live: {
+      publishableKey: '',
+      secretKeyEncrypted: '',
+      webhookSecretEncrypted: ''
+    },
     updatedAt: null
   },
   paypal: {
@@ -143,16 +158,36 @@ const storeSettingsSchema = new mongoose.Schema(
           type: Boolean,
           default: defaultPaymentGatewaySettings.razorpay.enabled
         },
-        keyId: {
+        mode: {
           type: String,
-          trim: true,
-          default: defaultPaymentGatewaySettings.razorpay.keyId,
-          maxlength: 120
+          enum: ['test', 'live'],
+          default: defaultPaymentGatewaySettings.razorpay.mode
         },
-        keySecretEncrypted: {
-          type: String,
-          trim: true,
-          default: defaultPaymentGatewaySettings.razorpay.keySecretEncrypted
+        test: {
+          keyId: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.razorpay.test.keyId,
+            maxlength: 120
+          },
+          keySecretEncrypted: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.razorpay.test.keySecretEncrypted
+          }
+        },
+        live: {
+          keyId: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.razorpay.live.keyId,
+            maxlength: 120
+          },
+          keySecretEncrypted: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.razorpay.live.keySecretEncrypted
+          }
         },
         updatedAt: {
           type: Date,
@@ -164,21 +199,46 @@ const storeSettingsSchema = new mongoose.Schema(
           type: Boolean,
           default: defaultPaymentGatewaySettings.stripe.enabled
         },
-        publishableKey: {
+        mode: {
           type: String,
-          trim: true,
-          default: defaultPaymentGatewaySettings.stripe.publishableKey,
-          maxlength: 180
+          enum: ['test', 'live'],
+          default: defaultPaymentGatewaySettings.stripe.mode
         },
-        secretKeyEncrypted: {
-          type: String,
-          trim: true,
-          default: defaultPaymentGatewaySettings.stripe.secretKeyEncrypted
+        test: {
+          publishableKey: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.stripe.test.publishableKey,
+            maxlength: 180
+          },
+          secretKeyEncrypted: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.stripe.test.secretKeyEncrypted
+          },
+          webhookSecretEncrypted: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.stripe.test.webhookSecretEncrypted
+          }
         },
-        webhookSecretEncrypted: {
-          type: String,
-          trim: true,
-          default: defaultPaymentGatewaySettings.stripe.webhookSecretEncrypted
+        live: {
+          publishableKey: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.stripe.live.publishableKey,
+            maxlength: 180
+          },
+          secretKeyEncrypted: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.stripe.live.secretKeyEncrypted
+          },
+          webhookSecretEncrypted: {
+            type: String,
+            trim: true,
+            default: defaultPaymentGatewaySettings.stripe.live.webhookSecretEncrypted
+          }
         },
         updatedAt: {
           type: Date,
