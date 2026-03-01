@@ -3,6 +3,7 @@ const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const StoreSettings = require('../models/StoreSettings');
+const User = require('../models/User');
 const { decryptSettingValue } = require('../utils/secureSettings');
 
 const ORDER_STATUSES = ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled'];
@@ -42,6 +43,7 @@ const PAYMENT_METHOD_LABELS = {
   cashfree: 'Cashfree',
   phonepe: 'PhonePe'
 };
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const trimOrEmpty = (value) => String(value || '').trim();
 
@@ -428,6 +430,66 @@ const createStoredOrder = async ({
   return { order };
 };
 
+const generateRandomPassword = () =>
+  `inv_${crypto.randomBytes(8).toString('hex')}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+const resolveManualInvoiceUser = async (payload = {}) => {
+  const customerMode = trimOrEmpty(payload.customerMode || 'existing').toLowerCase();
+
+  if (customerMode === 'existing') {
+    const userId = trimOrEmpty(payload.userId || '');
+    if (!userId) {
+      return { error: { status: 400, message: 'Existing customer is required for manual invoice' } };
+    }
+    const user = await User.findById(userId);
+    if (!user) {
+      return { error: { status: 404, message: 'Selected customer was not found' } };
+    }
+    return { user };
+  }
+
+  if (customerMode !== 'manual') {
+    return { error: { status: 400, message: 'customerMode must be either existing or manual' } };
+  }
+
+  const manualCustomer = payload.manualCustomer && typeof payload.manualCustomer === 'object' ? payload.manualCustomer : {};
+  const name = trimOrEmpty(manualCustomer.name || '');
+  const email = trimOrEmpty(manualCustomer.email || '').toLowerCase();
+  const phone = trimOrEmpty(manualCustomer.phone || '');
+
+  if (!name) {
+    return { error: { status: 400, message: 'Manual customer name is required' } };
+  }
+  if (!email || !emailPattern.test(email)) {
+    return { error: { status: 400, message: 'Manual customer email must be valid' } };
+  }
+
+  let user = await User.findOne({ email });
+  if (!user) {
+    user = await User.create({
+      name,
+      email,
+      phone,
+      password: generateRandomPassword()
+    });
+  } else {
+    let touched = false;
+    if (!trimOrEmpty(user.name) && name) {
+      user.name = name;
+      touched = true;
+    }
+    if (!trimOrEmpty(user.phone) && phone) {
+      user.phone = phone;
+      touched = true;
+    }
+    if (touched) {
+      await user.save();
+    }
+  }
+
+  return { user };
+};
+
 const getRazorpayClient = async () => {
   try {
     const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
@@ -508,6 +570,55 @@ const createOrder = async (req, res) => {
   }
 
   return res.status(201).json(saved.order);
+};
+
+const createManualInvoice = async (req, res) => {
+  const { items } = req.body;
+
+  const resolvedCustomer = await resolveManualInvoiceUser(req.body || {});
+  if (resolvedCustomer.error) {
+    return res.status(resolvedCustomer.error.status).json({ message: resolvedCustomer.error.message });
+  }
+  const customerUser = resolvedCustomer.user;
+
+  let checkoutDetails;
+  try {
+    checkoutDetails = normalizeCheckoutDetails(req.body || {}, customerUser || {});
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid invoice details' });
+  }
+
+  const requestedStatus = trimOrEmpty(req.body?.status || '').toLowerCase() || 'paid';
+  if (!ORDER_STATUSES.includes(requestedStatus)) {
+    return res.status(400).json({ message: `Invalid status. Allowed values: ${ORDER_STATUSES.join(', ')}` });
+  }
+
+  const paymentMethod = trimOrEmpty(req.body?.paymentMethod || '') || 'Manual Invoice';
+  const paidAt = requestedStatus === 'paid' ? new Date() : undefined;
+
+  const saved = await createStoredOrder({
+    userId: customerUser._id,
+    items,
+    shippingAddress: checkoutDetails.shippingAddress,
+    billingDetails: checkoutDetails.billingDetails,
+    taxDetails: checkoutDetails.taxDetails,
+    paymentMethod,
+    status: requestedStatus,
+    paidAt,
+    paymentResult: {
+      gateway: 'manual_invoice'
+    }
+  });
+
+  if (saved.error) {
+    return res.status(saved.error.status).json({ message: saved.error.message });
+  }
+
+  const populatedOrder = await saved.order.populate('user', 'name email');
+  return res.status(201).json({
+    message: 'Manual invoice created successfully',
+    order: populatedOrder
+  });
 };
 
 const createRazorpayOrder = async (req, res) => {
@@ -1651,7 +1762,9 @@ const getMyOrders = async (req, res) => {
 };
 
 const getMyOrderById = async (req, res) => {
-  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+  const order = req.user?.isAdmin
+    ? await Order.findById(req.params.id)
+    : await Order.findOne({ _id: req.params.id, user: req.user._id });
 
   if (!order) {
     return res.status(404).json({ message: 'Order not found' });
@@ -2079,6 +2192,7 @@ const getOrderReports = async (req, res) => {
 
 module.exports = {
   createOrder,
+  createManualInvoice,
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
   getPaymentGatewayOptions,

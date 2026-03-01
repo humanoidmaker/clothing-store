@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   createOrder,
+  createManualInvoice,
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
   getPaymentGatewayOptions,
@@ -18,6 +19,7 @@ const { protect, admin } = require('../middleware/auth');
 const router = express.Router();
 
 router.post('/', protect, createOrder);
+router.post('/admin/manual-invoice', protect, admin, createManualInvoice);
 router.post('/razorpay/order', protect, createRazorpayOrder);
 router.post('/razorpay/verify', protect, verifyRazorpayPaymentAndCreateOrder);
 router.get('/payment/options', protect, getPaymentGatewayOptions);

@@ -477,6 +477,28 @@ const resetPassword = async (req, res) => {
   return res.json({ message: 'Password has been reset successfully. Please login.' });
 };
 
+const getAdminUsers = async (req, res) => {
+  const query = trimOrEmpty(req.query?.query || '');
+  const limitRaw = Number(req.query?.limit || 50);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.round(limitRaw), 200) : 50;
+
+  const filters = {};
+  if (query) {
+    const regex = { $regex: query, $options: 'i' };
+    filters.$or = [{ name: regex }, { email: regex }, { phone: regex }];
+  }
+
+  const users = await User.find(filters)
+    .select(
+      'name email phone isAdmin createdAt defaultShippingAddress defaultBillingDetails defaultTaxDetails'
+    )
+    .sort({ createdAt: -1 })
+    .limit(limit);
+
+  const normalized = users.map((user) => buildUserResponse(user));
+  return res.json({ users: normalized, total: normalized.length });
+};
+
 const updateCurrentUser = async (req, res) => {
   const accountPayload =
     req.body?.account && typeof req.body.account === 'object' && !Array.isArray(req.body.account)
@@ -637,5 +659,6 @@ module.exports = {
   getCurrentUser,
   forgotPassword,
   resetPassword,
+  getAdminUsers,
   updateCurrentUser
 };
