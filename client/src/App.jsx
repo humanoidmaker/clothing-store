@@ -15,6 +15,7 @@ import AdminOrdersPage from './pages/AdminOrdersPage';
 import AdminProductsPage from './pages/AdminProductsPage';
 import AdminReportsPage from './pages/AdminReportsPage';
 import AdminSeoPage from './pages/AdminSeoPage';
+import AdminPaymentGatewaysPage from './pages/AdminPaymentGatewaysPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
@@ -95,6 +96,7 @@ const AppShell = () => {
                         <Route path="products" element={<AdminProductsPage />} />
                         <Route path="orders" element={<AdminOrdersPage />} />
                         <Route path="settings" element={<AdminSettingsPage />} />
+                        <Route path="settings/payment-gateways" element={<AdminPaymentGatewaysPage />} />
                       </Route>
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
