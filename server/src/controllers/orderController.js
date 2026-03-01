@@ -10,6 +10,7 @@ const PROFIT_STATUSES = ['paid', 'shipped', 'delivered'];
 const PIPELINE_STATUSES = ['pending', 'processing'];
 const REPORT_INTERVALS = ['day', 'week', 'month'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const COD_CHARGE_PER_PRODUCT = 25;
 const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
 const DEFAULT_PAYMENT_GATEWAYS = StoreSettings.defaultPaymentGatewaySettings || {
   cashOnDelivery: { enabled: true },
@@ -42,12 +43,73 @@ const PAYMENT_METHOD_LABELS = {
   phonepe: 'PhonePe'
 };
 
-const validateShippingAddress = (shippingAddress) => {
-  const requiredKeys = ['street', 'city', 'state', 'postalCode', 'country'];
+const trimOrEmpty = (value) => String(value || '').trim();
 
-  if (!shippingAddress) return false;
+const normalizeAddressInput = (address = {}, fallback = {}) => ({
+  fullName: trimOrEmpty(address.fullName || fallback.fullName || ''),
+  phone: trimOrEmpty(address.phone || fallback.phone || ''),
+  email: trimOrEmpty(address.email || fallback.email || ''),
+  street: trimOrEmpty(address.street || fallback.street || ''),
+  addressLine2: trimOrEmpty(address.addressLine2 || fallback.addressLine2 || ''),
+  city: trimOrEmpty(address.city || fallback.city || ''),
+  state: trimOrEmpty(address.state || fallback.state || ''),
+  postalCode: trimOrEmpty(address.postalCode || fallback.postalCode || ''),
+  country: trimOrEmpty(address.country || fallback.country || '')
+});
 
-  return requiredKeys.every((key) => String(shippingAddress[key] || '').trim().length > 0);
+const validateAddressRequiredFields = (address, requiredFields, label) => {
+  const missing = requiredFields.filter((field) => !trimOrEmpty(address?.[field]));
+  if (missing.length > 0) {
+    throw new Error(`${label} is incomplete. Missing: ${missing.join(', ')}`);
+  }
+};
+
+const normalizeCheckoutDetails = (payload = {}, user = {}) => {
+  const shippingAddress = normalizeAddressInput(payload.shippingAddress, {
+    fullName: trimOrEmpty(user?.name || ''),
+    email: trimOrEmpty(user?.email || '')
+  });
+  validateAddressRequiredFields(
+    shippingAddress,
+    ['fullName', 'phone', 'street', 'city', 'state', 'postalCode', 'country'],
+    'Shipping address'
+  );
+
+  const sameAsShipping = payload?.billingDetails?.sameAsShipping !== false;
+  const billingAddress = sameAsShipping
+    ? normalizeAddressInput(shippingAddress)
+    : normalizeAddressInput(payload?.billingDetails || {}, {
+        email: shippingAddress.email
+      });
+  validateAddressRequiredFields(
+    billingAddress,
+    ['fullName', 'phone', 'street', 'city', 'state', 'postalCode', 'country'],
+    'Billing details'
+  );
+
+  const businessPurchase = Boolean(payload?.taxDetails?.businessPurchase);
+  const taxDetails = {
+    businessPurchase,
+    businessName: trimOrEmpty(payload?.taxDetails?.businessName || ''),
+    gstin: trimOrEmpty(payload?.taxDetails?.gstin || '').toUpperCase(),
+    pan: trimOrEmpty(payload?.taxDetails?.pan || '').toUpperCase(),
+    purchaseOrderNumber: trimOrEmpty(payload?.taxDetails?.purchaseOrderNumber || ''),
+    notes: trimOrEmpty(payload?.taxDetails?.notes || '')
+  };
+
+  if (businessPurchase && !taxDetails.gstin) {
+    throw new Error('GSTIN is required for business purchase');
+  }
+
+  return {
+    shippingAddress,
+    billingDetails: {
+      sameAsShipping,
+      ...billingAddress
+    },
+    taxDetails,
+    codChargesAccepted: Boolean(payload?.codChargesAccepted)
+  };
 };
 
 const findVariantIndex = (product, selectedSize, selectedColor) => {
@@ -238,6 +300,13 @@ const prepareOrderItems = async (items) => {
   return { orderItems, stockUpdates, totalPrice };
 };
 
+const computeCodCharge = (preparedOrder) => {
+  const totalUnits = Array.isArray(preparedOrder?.orderItems)
+    ? preparedOrder.orderItems.reduce((sum, item) => sum + Math.max(0, Number(item?.quantity || 0)), 0)
+    : 0;
+  return Math.max(0, Number(totalUnits || 0)) * COD_CHARGE_PER_PRODUCT;
+};
+
 const deductStock = async (stockUpdates) => {
   const groupedUpdates = new Map();
 
@@ -297,7 +366,10 @@ const createStoredOrder = async ({
   userId,
   items,
   shippingAddress,
+  billingDetails,
+  taxDetails,
   paymentMethod,
+  codCharge = 0,
   status = 'pending',
   paidAt,
   paymentResult
@@ -313,12 +385,23 @@ const createStoredOrder = async ({
     return { error: { status: 400, message: error.message || 'Unable to reserve stock for order' } };
   }
 
+  const normalizedCodCharge = Number.isFinite(Number(codCharge)) ? Math.max(0, Number(codCharge)) : 0;
+  const itemsTotal = Number(prepared.totalPrice || 0);
+  const finalTotal = Number((itemsTotal + normalizedCodCharge).toFixed(2));
+
   const order = await Order.create({
     user: userId,
     orderItems: prepared.orderItems,
     shippingAddress,
+    billingDetails,
+    taxDetails,
     paymentMethod,
-    totalPrice: prepared.totalPrice,
+    totalPrice: finalTotal,
+    pricing: {
+      itemsTotal,
+      codCharge: normalizedCodCharge,
+      finalTotal
+    },
     status,
     paidAt,
     paymentResult
@@ -369,17 +452,37 @@ const getRazorpayClient = async () => {
 };
 
 const createOrder = async (req, res) => {
-  const { items, shippingAddress, paymentMethod } = req.body;
+  const { items, paymentMethod } = req.body;
+  let checkoutDetails;
+  try {
+    checkoutDetails = normalizeCheckoutDetails(req.body || {}, req.user || {});
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid checkout details' });
+  }
 
-  if (!validateShippingAddress(shippingAddress)) {
-    return res.status(400).json({ message: 'Complete shipping address is required' });
+  const resolvedGateway = normalizeGatewayId(paymentMethod || 'cash_on_delivery');
+  let codCharge = 0;
+  if (resolvedGateway === 'cash_on_delivery') {
+    const preparedForCod = await prepareOrderItems(items);
+    if (preparedForCod.error) {
+      return res.status(preparedForCod.error.status).json({ message: preparedForCod.error.message });
+    }
+    codCharge = computeCodCharge(preparedForCod);
+    if (codCharge > 0 && !checkoutDetails.codChargesAccepted) {
+      return res.status(400).json({
+        message: `Please confirm Cash on Delivery convenience charges of INR ${codCharge}`
+      });
+    }
   }
 
   const saved = await createStoredOrder({
     userId: req.user._id,
     items,
-    shippingAddress,
-    paymentMethod: paymentMethod || 'Cash on Delivery'
+    shippingAddress: checkoutDetails.shippingAddress,
+    billingDetails: checkoutDetails.billingDetails,
+    taxDetails: checkoutDetails.taxDetails,
+    paymentMethod: paymentMethod || PAYMENT_METHOD_LABELS.cash_on_delivery,
+    codCharge
   });
 
   if (saved.error) {
@@ -429,15 +532,18 @@ const createRazorpayOrder = async (req, res) => {
 };
 
 const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
-  const { items, shippingAddress, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+  const { items, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
   const razorpay = await getRazorpayClient();
 
   if (razorpay.error) {
     return res.status(razorpay.error.status).json({ message: razorpay.error.message });
   }
 
-  if (!validateShippingAddress(shippingAddress)) {
-    return res.status(400).json({ message: 'Complete shipping address is required' });
+  let checkoutDetails;
+  try {
+    checkoutDetails = normalizeCheckoutDetails(req.body || {}, req.user || {});
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid checkout details' });
   }
 
   if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
@@ -487,7 +593,9 @@ const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
   const saved = await createStoredOrder({
     userId: req.user._id,
     items,
-    shippingAddress,
+    shippingAddress: checkoutDetails.shippingAddress,
+    billingDetails: checkoutDetails.billingDetails,
+    taxDetails: checkoutDetails.taxDetails,
     paymentMethod: 'Razorpay',
     status: 'paid',
     paidAt: new Date(),
@@ -773,18 +881,27 @@ const getPaymentGatewayOptions = async (req, res) => {
     });
   }
 
-  return res.json({ methods });
+  return res.json({
+    methods,
+    codCharges: {
+      perProduct: COD_CHARGE_PER_PRODUCT,
+      currency: 'INR'
+    }
+  });
 };
 
 const createPaymentIntent = async (req, res) => {
   const gateway = normalizeGatewayId(req.body?.gateway);
-  const { items, shippingAddress } = req.body;
+  const { items } = req.body;
 
   if (!gateway) {
     return res.status(400).json({ message: 'Payment gateway is required' });
   }
-  if (!validateShippingAddress(shippingAddress)) {
-    return res.status(400).json({ message: 'Complete shipping address is required' });
+  let checkoutDetails;
+  try {
+    checkoutDetails = normalizeCheckoutDetails(req.body || {}, req.user || {});
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid checkout details' });
   }
 
   const prepared = await prepareOrderItems(items);
@@ -807,12 +924,21 @@ const createPaymentIntent = async (req, res) => {
     if (!config.cashOnDelivery.enabled) {
       return res.status(400).json({ message: 'Cash on Delivery is currently disabled' });
     }
+    const codCharge = computeCodCharge(prepared);
+    if (codCharge > 0 && !checkoutDetails.codChargesAccepted) {
+      return res.status(400).json({
+        message: `Please confirm Cash on Delivery convenience charges of INR ${codCharge}`
+      });
+    }
 
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
-      paymentMethod: PAYMENT_METHOD_LABELS.cash_on_delivery
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
+      paymentMethod: PAYMENT_METHOD_LABELS.cash_on_delivery,
+      codCharge
     });
 
     if (saved.error) {
@@ -822,7 +948,8 @@ const createPaymentIntent = async (req, res) => {
     return res.status(201).json({
       gateway,
       flow: 'direct',
-      order: saved.order
+      order: saved.order,
+      codCharge
     });
   }
 
@@ -1107,13 +1234,16 @@ const createPaymentIntent = async (req, res) => {
 
 const verifyPaymentAndCreateOrder = async (req, res) => {
   const gateway = normalizeGatewayId(req.body?.gateway);
-  const { items, shippingAddress } = req.body;
+  const { items } = req.body;
 
   if (!gateway) {
     return res.status(400).json({ message: 'Payment gateway is required' });
   }
-  if (!validateShippingAddress(shippingAddress)) {
-    return res.status(400).json({ message: 'Complete shipping address is required' });
+  let checkoutDetails;
+  try {
+    checkoutDetails = normalizeCheckoutDetails(req.body || {}, req.user || {});
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid checkout details' });
   }
 
   const prepared = await prepareOrderItems(items);
@@ -1171,7 +1301,9 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.razorpay,
       status: 'paid',
       paidAt: new Date(),
@@ -1213,7 +1345,9 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.stripe,
       status: 'paid',
       paidAt: new Date(),
@@ -1277,7 +1411,9 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.paypal,
       status: 'paid',
       paidAt: new Date(),
@@ -1339,7 +1475,9 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.payu,
       status: 'paid',
       paidAt: new Date(),
@@ -1389,7 +1527,9 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.cashfree,
       status: 'paid',
       paidAt: new Date(),
@@ -1447,7 +1587,9 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: checkoutDetails.shippingAddress,
+      billingDetails: checkoutDetails.billingDetails,
+      taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.phonepe,
       status: 'paid',
       paidAt: new Date(),

@@ -52,11 +52,35 @@ const orderSchema = new mongoose.Schema(
       required: true
     },
     shippingAddress: {
+      fullName: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      email: { type: String, default: '' },
       street: { type: String, required: true },
+      addressLine2: { type: String, default: '' },
       city: { type: String, required: true },
       state: { type: String, required: true },
       postalCode: { type: String, required: true },
       country: { type: String, required: true }
+    },
+    billingDetails: {
+      sameAsShipping: { type: Boolean, default: true },
+      fullName: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      email: { type: String, default: '' },
+      street: { type: String, default: '' },
+      addressLine2: { type: String, default: '' },
+      city: { type: String, default: '' },
+      state: { type: String, default: '' },
+      postalCode: { type: String, default: '' },
+      country: { type: String, default: '' }
+    },
+    taxDetails: {
+      businessPurchase: { type: Boolean, default: false },
+      businessName: { type: String, default: '' },
+      gstin: { type: String, default: '' },
+      pan: { type: String, default: '' },
+      purchaseOrderNumber: { type: String, default: '' },
+      notes: { type: String, default: '' }
     },
     paymentMethod: {
       type: String,
@@ -85,6 +109,11 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0
+    },
+    pricing: {
+      itemsTotal: { type: Number, min: 0, default: 0 },
+      codCharge: { type: Number, min: 0, default: 0 },
+      finalTotal: { type: Number, min: 0, default: 0 }
     },
     status: {
       type: String,

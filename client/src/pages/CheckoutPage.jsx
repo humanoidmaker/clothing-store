@@ -5,14 +5,16 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   CircularProgress,
   Divider,
   FormControl,
-  Grid,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
   Stack,
+  Switch,
   TextField,
   Typography
 } from '@mui/material';
@@ -29,6 +31,7 @@ import usePaginationState from '../hooks/usePaginationState';
 import { formatINR } from '../utils/currency';
 
 const PENDING_PAYMENT_STORAGE_KEY = 'checkout_pending_payment_v1';
+const DEFAULT_COD_CHARGE_PER_PRODUCT = 25;
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -105,13 +108,42 @@ const CheckoutPage = () => {
   const [error, setError] = useState('');
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedGateway, setSelectedGateway] = useState('');
+  const [codChargePerProduct, setCodChargePerProduct] = useState(DEFAULT_COD_CHARGE_PER_PRODUCT);
   const [form, setForm] = useState({
-    street: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: 'India'
+    shipping: {
+      fullName: '',
+      phone: '',
+      email: String(user?.email || ''),
+      street: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'India'
+    },
+    billing: {
+      sameAsShipping: true,
+      fullName: '',
+      phone: '',
+      email: '',
+      street: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'India'
+    },
+    tax: {
+      businessPurchase: false,
+      businessName: '',
+      gstin: '',
+      pan: '',
+      purchaseOrderNumber: '',
+      notes: ''
+    },
+    codChargesAccepted: false
   });
+
   const {
     page,
     rowsPerPage,
@@ -127,19 +159,77 @@ const CheckoutPage = () => {
     () => paymentMethods.find((entry) => entry.id === selectedGateway) || null,
     [paymentMethods, selectedGateway]
   );
+  const codProductCount = useMemo(
+    () => items.reduce((sum, item) => sum + Math.max(0, Number(item?.quantity || 0)), 0),
+    [items]
+  );
+  const codChargeEstimate = useMemo(
+    () =>
+      selectedMethod?.id === 'cash_on_delivery'
+        ? Math.max(0, Number(codChargePerProduct || 0)) * codProductCount
+        : 0,
+    [selectedMethod, codChargePerProduct, codProductCount]
+  );
+  const totalPayable = useMemo(() => Number(subtotal || 0) + Number(codChargeEstimate || 0), [subtotal, codChargeEstimate]);
 
-  const buildCheckoutPayload = () => ({
-    items: items.map((item) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-      selectedSize: item.selectedSize,
-      selectedColor: item.selectedColor
-    })),
-    shippingAddress: form
-  });
+  const buildCheckoutPayload = () => {
+    const shippingAddress = {
+      ...form.shipping
+    };
+    const billingDetails = form.billing.sameAsShipping
+      ? {
+          sameAsShipping: true,
+          ...form.shipping
+        }
+      : {
+          sameAsShipping: false,
+          ...form.billing
+        };
 
-  const onChange = (event) => {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+    return {
+      items: items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        selectedSize: item.selectedSize,
+        selectedColor: item.selectedColor
+      })),
+      shippingAddress,
+      billingDetails,
+      taxDetails: {
+        ...form.tax
+      },
+      codChargesAccepted: Boolean(form.codChargesAccepted)
+    };
+  };
+
+  const updateShipping = (field, value) => {
+    setForm((current) => ({
+      ...current,
+      shipping: {
+        ...current.shipping,
+        [field]: value
+      }
+    }));
+  };
+
+  const updateBilling = (field, value) => {
+    setForm((current) => ({
+      ...current,
+      billing: {
+        ...current.billing,
+        [field]: value
+      }
+    }));
+  };
+
+  const updateTax = (field, value) => {
+    setForm((current) => ({
+      ...current,
+      tax: {
+        ...current.tax,
+        [field]: value
+      }
+    }));
   };
 
   useEffect(() => {
@@ -151,8 +241,12 @@ const CheckoutPage = () => {
       try {
         const { data } = await api.get('/orders/payment/options');
         const methods = Array.isArray(data?.methods) ? data.methods : [];
+        const codPerProduct = Number(data?.codCharges?.perProduct);
         if (!cancelled) {
           setPaymentMethods(methods);
+          if (Number.isFinite(codPerProduct) && codPerProduct >= 0) {
+            setCodChargePerProduct(codPerProduct);
+          }
           setSelectedGateway((current) => {
             if (current && methods.some((entry) => entry.id === current)) {
               return current;
@@ -271,6 +365,19 @@ const CheckoutPage = () => {
       return;
     }
 
+    if (selectedMethod?.id === 'cash_on_delivery' && codChargeEstimate > 0) {
+      if (!form.codChargesAccepted) {
+        setError('Please accept Cash on Delivery convenience charges before placing order.');
+        return;
+      }
+      const confirmed = window.confirm(
+        `Cash on Delivery convenience charge of ${formatINR(codChargeEstimate)} will be added to your order. Continue?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setError('');
     setSubmitting(true);
 
@@ -373,118 +480,20 @@ const CheckoutPage = () => {
       <PageHeader
         eyebrow="Checkout"
         title="Shipping and Payment"
-        subtitle="Securely complete your order using any enabled payment gateway."
+        subtitle="Review order items, then submit shipping, billing, and payment details."
       />
 
       <Box
         sx={{
           display: 'grid',
           gap: 1.2,
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 320px' },
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 70%) minmax(300px, 30%)' },
           alignItems: 'start'
         }}
       >
         <Card sx={{ width: '100%' }}>
-          <CardContent component="form" onSubmit={onSubmit} sx={{ p: 1.2 }}>
-            <Grid container spacing={1.2}>
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel id="payment-method-label">Payment Method</InputLabel>
-                  <Select
-                    labelId="payment-method-label"
-                    value={selectedGateway}
-                    label="Payment Method"
-                    onChange={(event) => setSelectedGateway(event.target.value)}
-                    disabled={loadingMethods || verifyingRedirect || paymentMethods.length === 0}
-                  >
-                    {paymentMethods.map((method) => (
-                      <MenuItem key={method.id} value={method.id} disabled={method.configured === false}>
-                        {method.configured === false ? `${method.label} (Not configured)` : method.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth name="street" label="Street" value={form.street} onChange={onChange} required />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth name="city" label="City" value={form.city} onChange={onChange} required />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth name="state" label="State" value={form.state} onChange={onChange} required />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  name="postalCode"
-                  label="Postal Code"
-                  value={form.postalCode}
-                  onChange={onChange}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField fullWidth name="country" label="Country" value={form.country} onChange={onChange} required />
-              </Grid>
-            </Grid>
-
-            {error && (
-              <Alert severity="error" sx={{ mt: 1.2 }}>
-                {error}
-              </Alert>
-            )}
-            {!loadingMethods && paymentMethods.length === 0 && (
-              <Alert severity="warning" sx={{ mt: 1.2 }}>
-                No payment gateway is available right now. Please contact support.
-              </Alert>
-            )}
-            {verifyingRedirect && (
-              <Alert severity="info" sx={{ mt: 1.2 }}>
-                Verifying payment with gateway...
-              </Alert>
-            )}
-            {selectedMethod && selectedMethod.configured === false && (
-              <Alert severity="warning" sx={{ mt: 1.2 }}>
-                Selected gateway is enabled but not configured yet. Add API keys in admin settings to use it.
-              </Alert>
-            )}
-
-            <Button
-              type="submit"
-              variant="contained"
-              sx={{ mt: 1.2 }}
-              startIcon={
-                submitting || verifyingRedirect
-                  ? <CircularProgress size={14} color="inherit" />
-                  : selectedMethod?.id !== 'cash_on_delivery'
-                    ? <CreditCardOutlinedIcon />
-                    : <LocalShippingOutlinedIcon />
-              }
-              disabled={
-                submitting ||
-                loadingMethods ||
-                verifyingRedirect ||
-                !selectedGateway ||
-                paymentMethods.length === 0 ||
-                selectedMethod?.configured === false
-              }
-            >
-              {submitting || verifyingRedirect
-                ? 'Processing...'
-                : selectedMethod?.id === 'cash_on_delivery'
-                  ? 'Place Order'
-                  : selectedMethod?.label
-                    ? `Pay with ${selectedMethod.label}`
-                    : 'Continue'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card sx={{ width: '100%', position: { md: 'sticky' }, top: { md: 68 } }}>
           <CardContent sx={{ p: 1.2 }}>
-            <Typography variant="h6">Order Review</Typography>
+            <Typography variant="h6">Ordered Items</Typography>
             <Divider sx={{ my: 1.1 }} />
 
             <Stack spacing={0.8}>
@@ -513,9 +522,314 @@ const CheckoutPage = () => {
             />
 
             <Divider sx={{ my: 1.2 }} />
-            <Typography variant="h5" color="primary">
-              {formatINR(subtotal)}
-            </Typography>
+            <Stack spacing={0.6}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Items Subtotal
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {formatINR(subtotal)}
+                </Typography>
+              </Box>
+              {selectedMethod?.id === 'cash_on_delivery' && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    COD Charge ({codProductCount} units x {formatINR(codChargePerProduct)})
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {formatINR(codChargeEstimate)}
+                  </Typography>
+                </Box>
+              )}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="h6">Total Payable</Typography>
+                <Typography variant="h6" color="primary">
+                  {formatINR(totalPayable)}
+                </Typography>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        <Card sx={{ width: '100%', position: { md: 'sticky' }, top: { md: 68 } }}>
+          <CardContent component="form" onSubmit={onSubmit} sx={{ p: 1.1 }}>
+            <Stack spacing={1}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                Mandatory Details
+              </Typography>
+
+              <FormControl fullWidth>
+                <InputLabel id="payment-method-label">Payment Method</InputLabel>
+                <Select
+                  labelId="payment-method-label"
+                  value={selectedGateway}
+                  label="Payment Method"
+                  onChange={(event) => setSelectedGateway(event.target.value)}
+                  disabled={loadingMethods || verifyingRedirect || paymentMethods.length === 0}
+                >
+                  {paymentMethods.map((method) => (
+                    <MenuItem key={method.id} value={method.id} disabled={method.configured === false}>
+                      {method.configured === false ? `${method.label} (Not configured)` : method.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                Shipping Details
+              </Typography>
+              <TextField
+                fullWidth
+                required
+                label="Full Name"
+                value={form.shipping.fullName}
+                onChange={(event) => updateShipping('fullName', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Phone Number"
+                value={form.shipping.phone}
+                onChange={(event) => updateShipping('phone', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                label="Email"
+                value={form.shipping.email}
+                onChange={(event) => updateShipping('email', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Street Address"
+                value={form.shipping.street}
+                onChange={(event) => updateShipping('street', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                label="Address Line 2 (Optional)"
+                value={form.shipping.addressLine2}
+                onChange={(event) => updateShipping('addressLine2', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                required
+                label="City"
+                value={form.shipping.city}
+                onChange={(event) => updateShipping('city', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                required
+                label="State"
+                value={form.shipping.state}
+                onChange={(event) => updateShipping('state', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Postal Code"
+                value={form.shipping.postalCode}
+                onChange={(event) => updateShipping('postalCode', event.target.value)}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Country"
+                value={form.shipping.country}
+                onChange={(event) => updateShipping('country', event.target.value)}
+              />
+
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                Billing Details (Tax Invoice)
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.billing.sameAsShipping}
+                    onChange={(event) => updateBilling('sameAsShipping', event.target.checked)}
+                  />
+                }
+                label="Billing address same as shipping"
+              />
+              {!form.billing.sameAsShipping && (
+                <Stack spacing={1}>
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing Full Name"
+                    value={form.billing.fullName}
+                    onChange={(event) => updateBilling('fullName', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing Phone Number"
+                    value={form.billing.phone}
+                    onChange={(event) => updateBilling('phone', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Billing Email"
+                    value={form.billing.email}
+                    onChange={(event) => updateBilling('email', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing Street Address"
+                    value={form.billing.street}
+                    onChange={(event) => updateBilling('street', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Billing Address Line 2 (Optional)"
+                    value={form.billing.addressLine2}
+                    onChange={(event) => updateBilling('addressLine2', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing City"
+                    value={form.billing.city}
+                    onChange={(event) => updateBilling('city', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing State"
+                    value={form.billing.state}
+                    onChange={(event) => updateBilling('state', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing Postal Code"
+                    value={form.billing.postalCode}
+                    onChange={(event) => updateBilling('postalCode', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Billing Country"
+                    value={form.billing.country}
+                    onChange={(event) => updateBilling('country', event.target.value)}
+                  />
+                </Stack>
+              )}
+
+              <Divider />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Optional Business / GST Details
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.tax.businessPurchase}
+                    onChange={(event) => updateTax('businessPurchase', event.target.checked)}
+                  />
+                }
+                label="This is a business purchase (GST invoice)"
+              />
+              {form.tax.businessPurchase && (
+                <Stack spacing={1}>
+                  <TextField
+                    fullWidth
+                    label="Business Name"
+                    value={form.tax.businessName}
+                    onChange={(event) => updateTax('businessName', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="GSTIN"
+                    value={form.tax.gstin}
+                    onChange={(event) => updateTax('gstin', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    label="PAN (Optional)"
+                    value={form.tax.pan}
+                    onChange={(event) => updateTax('pan', event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    label="PO Number (Optional)"
+                    value={form.tax.purchaseOrderNumber}
+                    onChange={(event) => updateTax('purchaseOrderNumber', event.target.value)}
+                  />
+                </Stack>
+              )}
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Order Notes (Optional)"
+                value={form.tax.notes}
+                onChange={(event) => updateTax('notes', event.target.value)}
+              />
+
+              {selectedMethod?.id === 'cash_on_delivery' && codChargeEstimate > 0 && (
+                <Stack spacing={0.5}>
+                  <Alert severity="warning">
+                    Cash on Delivery convenience charges apply: {formatINR(codChargeEstimate)} ({codProductCount} units).
+                  </Alert>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.codChargesAccepted}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            codChargesAccepted: event.target.checked
+                          }))
+                        }
+                      />
+                    }
+                    label="I accept the additional Cash on Delivery charges."
+                  />
+                </Stack>
+              )}
+
+              {error && <Alert severity="error">{error}</Alert>}
+              {!loadingMethods && paymentMethods.length === 0 && (
+                <Alert severity="warning">No payment gateway is available right now. Please contact support.</Alert>
+              )}
+              {verifyingRedirect && <Alert severity="info">Verifying payment with gateway...</Alert>}
+              {selectedMethod && selectedMethod.configured === false && (
+                <Alert severity="warning">
+                  Selected gateway is enabled but not configured yet. Add API keys in admin settings to use it.
+                </Alert>
+              )}
+
+              <Button
+                type="submit"
+                variant="contained"
+                startIcon={
+                  submitting || verifyingRedirect
+                    ? <CircularProgress size={14} color="inherit" />
+                    : selectedMethod?.id !== 'cash_on_delivery'
+                      ? <CreditCardOutlinedIcon />
+                      : <LocalShippingOutlinedIcon />
+                }
+                disabled={
+                  submitting ||
+                  loadingMethods ||
+                  verifyingRedirect ||
+                  !selectedGateway ||
+                  paymentMethods.length === 0 ||
+                  selectedMethod?.configured === false
+                }
+              >
+                {submitting || verifyingRedirect
+                  ? 'Processing...'
+                  : selectedMethod?.id === 'cash_on_delivery'
+                    ? 'Place Order'
+                    : selectedMethod?.label
+                      ? `Pay with ${selectedMethod.label}`
+                      : 'Continue'}
+              </Button>
+            </Stack>
           </CardContent>
         </Card>
       </Box>
