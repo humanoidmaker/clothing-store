@@ -80,6 +80,26 @@ const defaultPaymentGatewaySettings = {
   }
 };
 const defaultShowOutOfStockProducts = false;
+const defaultAuthSecuritySettings = {
+  sendLoginAlertEmail: false,
+  recaptcha: {
+    enabled: false,
+    siteKey: '',
+    secretKeyEncrypted: '',
+    updatedAt: null
+  },
+  msg91Smtp: {
+    enabled: false,
+    host: 'smtp.msg91.com',
+    port: 587,
+    secure: false,
+    username: '',
+    passwordEncrypted: '',
+    fromEmail: '',
+    fromName: 'Humanoid Maker',
+    updatedAt: null
+  }
+};
 
 const storeSettingsSchema = new mongoose.Schema(
   {
@@ -361,6 +381,83 @@ const storeSettingsSchema = new mongoose.Schema(
         }
       }
     },
+    authSecurity: {
+      sendLoginAlertEmail: {
+        type: Boolean,
+        default: defaultAuthSecuritySettings.sendLoginAlertEmail
+      },
+      recaptcha: {
+        enabled: {
+          type: Boolean,
+          default: defaultAuthSecuritySettings.recaptcha.enabled
+        },
+        siteKey: {
+          type: String,
+          trim: true,
+          default: defaultAuthSecuritySettings.recaptcha.siteKey,
+          maxlength: 260
+        },
+        secretKeyEncrypted: {
+          type: String,
+          trim: true,
+          default: defaultAuthSecuritySettings.recaptcha.secretKeyEncrypted
+        },
+        updatedAt: {
+          type: Date,
+          default: defaultAuthSecuritySettings.recaptcha.updatedAt
+        }
+      },
+      msg91Smtp: {
+        enabled: {
+          type: Boolean,
+          default: defaultAuthSecuritySettings.msg91Smtp.enabled
+        },
+        host: {
+          type: String,
+          trim: true,
+          default: defaultAuthSecuritySettings.msg91Smtp.host,
+          maxlength: 180
+        },
+        port: {
+          type: Number,
+          default: defaultAuthSecuritySettings.msg91Smtp.port,
+          min: 1,
+          max: 65535
+        },
+        secure: {
+          type: Boolean,
+          default: defaultAuthSecuritySettings.msg91Smtp.secure
+        },
+        username: {
+          type: String,
+          trim: true,
+          default: defaultAuthSecuritySettings.msg91Smtp.username,
+          maxlength: 180
+        },
+        passwordEncrypted: {
+          type: String,
+          trim: true,
+          default: defaultAuthSecuritySettings.msg91Smtp.passwordEncrypted
+        },
+        fromEmail: {
+          type: String,
+          trim: true,
+          lowercase: true,
+          default: defaultAuthSecuritySettings.msg91Smtp.fromEmail,
+          maxlength: 180
+        },
+        fromName: {
+          type: String,
+          trim: true,
+          default: defaultAuthSecuritySettings.msg91Smtp.fromName,
+          maxlength: 140
+        },
+        updatedAt: {
+          type: Date,
+          default: defaultAuthSecuritySettings.msg91Smtp.updatedAt
+        }
+      }
+    },
     // Legacy field retained for backward migration into paymentGateways.razorpay.
     razorpay: {
       keyId: {
@@ -389,6 +486,7 @@ storeSettingsSchema.statics.defaultThemeSettings = defaultThemeSettings;
 storeSettingsSchema.statics.defaultRazorpaySettings = defaultRazorpaySettings;
 storeSettingsSchema.statics.defaultPaymentGatewaySettings = defaultPaymentGatewaySettings;
 storeSettingsSchema.statics.defaultShowOutOfStockProducts = defaultShowOutOfStockProducts;
+storeSettingsSchema.statics.defaultAuthSecuritySettings = defaultAuthSecuritySettings;
 
 module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
 

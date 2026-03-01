@@ -4,10 +4,11 @@ import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
+import { getRecaptchaToken } from '../utils/recaptcha';
 
 const RegisterPage = () => {
   const { register } = useAuth();
-  const { storeName } = useStoreSettings();
+  const { storeName, authSecuritySettings } = useStoreSettings();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -29,7 +30,12 @@ const RegisterPage = () => {
     setSubmitting(true);
 
     try {
-      await register(name, email, password);
+      let recaptchaToken = '';
+      if (authSecuritySettings?.recaptcha?.enabled) {
+        recaptchaToken = await getRecaptchaToken(authSecuritySettings?.recaptcha?.siteKey, 'register');
+      }
+
+      await register(name, email, password, recaptchaToken);
       navigate('/');
     } catch (requestError) {
       setError(requestError.message);
@@ -68,6 +74,12 @@ const RegisterPage = () => {
               minLength={6}
               required
             />
+
+            {authSecuritySettings?.recaptcha?.enabled && (
+              <Typography variant="caption" color="text.secondary">
+                Protected by Google reCAPTCHA.
+              </Typography>
+            )}
 
             {error && <Alert severity="error">{error}</Alert>}
 

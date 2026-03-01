@@ -1,39 +1,34 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, TextField, Typography } from '@mui/material';
-import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { getRecaptchaToken } from '../utils/recaptcha';
 
-const LoginPage = () => {
-  const { login } = useAuth();
+const ForgotPasswordPage = () => {
+  const { forgotPassword } = useAuth();
   const { storeName, authSecuritySettings } = useStoreSettings();
-  const location = useLocation();
-  const navigate = useNavigate();
-
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const destination = location.state?.from?.pathname || '/';
 
   const onSubmit = async (event) => {
     event.preventDefault();
     setError('');
+    setSuccess('');
     setSubmitting(true);
 
     try {
       let recaptchaToken = '';
       if (authSecuritySettings?.recaptcha?.enabled) {
-        recaptchaToken = await getRecaptchaToken(authSecuritySettings?.recaptcha?.siteKey, 'login');
+        recaptchaToken = await getRecaptchaToken(authSecuritySettings?.recaptcha?.siteKey, 'forgot_password');
       }
-
-      await login(email, password, recaptchaToken);
-      navigate(destination, { replace: true });
+      const response = await forgotPassword(email, recaptchaToken);
+      setSuccess(response?.message || 'Password reset email has been sent if account exists.');
     } catch (requestError) {
-      setError(requestError.message);
+      setError(requestError.message || 'Unable to process request');
     } finally {
       setSubmitting(false);
     }
@@ -44,22 +39,21 @@ const LoginPage = () => {
       <Card sx={{ width: '100%', maxWidth: 440 }}>
         <CardContent component="form" onSubmit={onSubmit} sx={{ p: { xs: 1.5, md: 2 } }}>
           <Typography variant="overline" sx={{ color: 'secondary.main', fontWeight: 700, letterSpacing: '0.12em' }}>
-            Welcome Back
+            Account Recovery
           </Typography>
           <Typography variant="h5" sx={{ mb: 0.5 }}>
-            Login to {storeName}
+            Reset Password
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Continue from where you left off and manage your orders in one place.
+            Enter your login email for {storeName}. We will send a reset link.
           </Typography>
 
-          <Stack spacing={1.6}>
-            <TextField label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <Stack spacing={1.4}>
             <TextField
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              label="Login Email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               required
             />
 
@@ -70,22 +64,20 @@ const LoginPage = () => {
             )}
 
             {error && <Alert severity="error">{error}</Alert>}
+            {success && <Alert severity="success">{success}</Alert>}
 
             <Button
               type="submit"
               variant="contained"
               size="large"
               disabled={submitting}
-              startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : <LoginOutlinedIcon />}
+              startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : <MailOutlineIcon />}
             >
-              {submitting ? 'Signing in...' : 'Sign In'}
+              {submitting ? 'Sending...' : 'Send Reset Link'}
             </Button>
 
             <Typography variant="body2" color="text.secondary">
-              New here? <RouterLink to="/register">Create account</RouterLink>
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Forgot password? <RouterLink to="/forgot-password">Reset here</RouterLink>
+              Back to <RouterLink to="/login">Login</RouterLink>
             </Typography>
           </Stack>
         </CardContent>
@@ -94,5 +86,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
-
+export default ForgotPasswordPage;

@@ -126,8 +126,8 @@ export const AuthProvider = ({ children }) => {
     fetchProfile();
   }, [fetchProfile]);
 
-  const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password }).catch((error) => {
+  const login = async (email, password, recaptchaToken = '') => {
+    const { data } = await api.post('/auth/login', { email, password, recaptchaToken }).catch((error) => {
       throw new Error(mapError(error));
     });
 
@@ -135,12 +135,33 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const register = async (name, email, password) => {
-    const { data } = await api.post('/auth/register', { name, email, password }).catch((error) => {
+  const register = async (name, email, password, recaptchaToken = '') => {
+    const { data } = await api.post('/auth/register', { name, email, password, recaptchaToken }).catch((error) => {
       throw new Error(mapError(error));
     });
 
     saveAuth(data);
+    return data;
+  };
+
+  const forgotPassword = async (email, recaptchaToken = '') => {
+    const { data } = await api.post('/auth/forgot-password', { email, recaptchaToken }).catch((error) => {
+      throw new Error(mapError(error));
+    });
+    return data;
+  };
+
+  const resetPassword = async ({ email, token, newPassword, recaptchaToken = '' }) => {
+    const { data } = await api
+      .post('/auth/reset-password', {
+        email,
+        token,
+        newPassword,
+        recaptchaToken
+      })
+      .catch((error) => {
+        throw new Error(mapError(error));
+      });
     return data;
   };
 
@@ -166,6 +187,8 @@ export const AuthProvider = ({ children }) => {
       isAdmin: Boolean(user?.isAdmin),
       login,
       register,
+      forgotPassword,
+      resetPassword,
       updateProfile,
       logout
     }),

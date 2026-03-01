@@ -66,6 +66,28 @@ const userSchema = new mongoose.Schema(
       purchaseOrderNumber: { type: String, trim: true, default: '', maxlength: 80 },
       notes: { type: String, trim: true, default: '', maxlength: 500 }
     },
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lockUntil: {
+      type: Date,
+      default: null
+    },
+    passwordResetTokenHash: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      default: null
+    },
+    lastLoginAt: {
+      type: Date,
+      default: null
+    },
     isAdmin: {
       type: Boolean,
       default: false

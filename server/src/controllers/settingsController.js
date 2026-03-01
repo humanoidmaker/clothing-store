@@ -7,9 +7,12 @@ const defaultFooterText = 'Premium everyday clothing, delivered across India.';
 const defaultThemeSettings = StoreSettings.defaultThemeSettings;
 const defaultPaymentGatewaySettings = StoreSettings.defaultPaymentGatewaySettings;
 const defaultShowOutOfStockProducts = StoreSettings.defaultShowOutOfStockProducts;
+const defaultAuthSecuritySettings = StoreSettings.defaultAuthSecuritySettings;
 const hexColorPattern = /^#([0-9a-fA-F]{6})$/;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const cloneGatewayDefaults = () => JSON.parse(JSON.stringify(defaultPaymentGatewaySettings));
+const cloneAuthSecurityDefaults = () => JSON.parse(JSON.stringify(defaultAuthSecuritySettings));
 
 const normalizeThemeInput = (value = {}) => ({
   primaryColor: String(value.primaryColor || '').trim(),
@@ -67,6 +70,79 @@ const normalizeThemeOutput = (theme = {}) => ({
 
 const normalizeShowOutOfStockProducts = (value) =>
   typeof value === 'boolean' ? value : defaultShowOutOfStockProducts;
+
+const normalizeAuthSecurityInput = (value = {}) => {
+  const defaults = cloneAuthSecurityDefaults();
+  const source = value && typeof value === 'object' ? value : {};
+
+  const recaptchaEnabled =
+    typeof source?.recaptcha?.enabled === 'boolean' ? source.recaptcha.enabled : defaults.recaptcha.enabled;
+  const smtpEnabled = typeof source?.msg91Smtp?.enabled === 'boolean' ? source.msg91Smtp.enabled : defaults.msg91Smtp.enabled;
+
+  const normalized = {
+    sendLoginAlertEmail:
+      typeof source?.sendLoginAlertEmail === 'boolean'
+        ? source.sendLoginAlertEmail
+        : defaults.sendLoginAlertEmail,
+    recaptcha: {
+      enabled: recaptchaEnabled,
+      siteKey: String(source?.recaptcha?.siteKey || '').trim(),
+      secretKeyEncrypted: String(source?.recaptcha?.secretKeyEncrypted || '').trim(),
+      updatedAt: source?.recaptcha?.updatedAt || null
+    },
+    msg91Smtp: {
+      enabled: smtpEnabled,
+      host: String(source?.msg91Smtp?.host || defaults.msg91Smtp.host).trim() || defaults.msg91Smtp.host,
+      port: Number(source?.msg91Smtp?.port || defaults.msg91Smtp.port),
+      secure: typeof source?.msg91Smtp?.secure === 'boolean' ? source.msg91Smtp.secure : defaults.msg91Smtp.secure,
+      username: String(source?.msg91Smtp?.username || '').trim(),
+      passwordEncrypted: String(source?.msg91Smtp?.passwordEncrypted || '').trim(),
+      fromEmail: String(source?.msg91Smtp?.fromEmail || '').trim().toLowerCase(),
+      fromName: String(source?.msg91Smtp?.fromName || defaults.msg91Smtp.fromName).trim() || defaults.msg91Smtp.fromName,
+      updatedAt: source?.msg91Smtp?.updatedAt || null
+    }
+  };
+
+  if (!Number.isFinite(normalized.msg91Smtp.port) || normalized.msg91Smtp.port < 1 || normalized.msg91Smtp.port > 65535) {
+    normalized.msg91Smtp.port = defaults.msg91Smtp.port;
+  }
+
+  return normalized;
+};
+
+const normalizeAuthSecurityPublicOutput = (value = {}) => {
+  const normalized = normalizeAuthSecurityInput(value);
+  return {
+    recaptcha: {
+      enabled: Boolean(normalized.recaptcha.enabled),
+      siteKey: normalized.recaptcha.siteKey
+    }
+  };
+};
+
+const normalizeAuthSecurityOutput = (value = {}) => {
+  const normalized = normalizeAuthSecurityInput(value);
+  return {
+    sendLoginAlertEmail: Boolean(normalized.sendLoginAlertEmail),
+    recaptcha: {
+      enabled: Boolean(normalized.recaptcha.enabled),
+      siteKey: normalized.recaptcha.siteKey,
+      secretKeyConfigured: Boolean(normalized.recaptcha.secretKeyEncrypted),
+      updatedAt: normalized.recaptcha.updatedAt || null
+    },
+    msg91Smtp: {
+      enabled: Boolean(normalized.msg91Smtp.enabled),
+      host: normalized.msg91Smtp.host,
+      port: normalized.msg91Smtp.port,
+      secure: Boolean(normalized.msg91Smtp.secure),
+      username: normalized.msg91Smtp.username,
+      passwordConfigured: Boolean(normalized.msg91Smtp.passwordEncrypted),
+      fromEmail: normalized.msg91Smtp.fromEmail,
+      fromName: normalized.msg91Smtp.fromName,
+      updatedAt: normalized.msg91Smtp.updatedAt || null
+    }
+  };
+};
 
 const normalizePaymentGatewaysInput = (value = {}, legacyRazorpay = {}) => {
   const defaults = cloneGatewayDefaults();
@@ -250,11 +326,13 @@ const buildResponse = (settings) => ({
   storeName: settings.storeName,
   footerText: settings.footerText,
   showOutOfStockProducts: normalizeShowOutOfStockProducts(settings.showOutOfStockProducts),
-  theme: normalizeThemeOutput(settings.theme)
+  theme: normalizeThemeOutput(settings.theme),
+  authSecurity: normalizeAuthSecurityPublicOutput(settings.authSecurity || {})
 });
 
 const buildAdminResponse = (settings) => ({
   ...buildResponse(settings),
+  authSecurity: normalizeAuthSecurityOutput(normalizeAuthSecurityInput(settings.authSecurity || {})),
   paymentGateways: normalizePaymentGatewaysOutput(
     normalizePaymentGatewaysInput(settings.paymentGateways || {}, settings.razorpay || {})
   )
@@ -270,7 +348,8 @@ const ensureSettings = async () => {
       footerText: defaultFooterText,
       showOutOfStockProducts: defaultShowOutOfStockProducts,
       theme: defaultThemeSettings,
-      paymentGateways: defaultPaymentGatewaySettings
+      paymentGateways: defaultPaymentGatewaySettings,
+      authSecurity: defaultAuthSecuritySettings
     });
     await settings.save();
     return settings;
@@ -311,6 +390,12 @@ const ensureSettings = async () => {
   const mergedPaymentGateways = normalizePaymentGatewaysInput(settings.paymentGateways || {}, settings.razorpay || {});
   if (JSON.stringify(mergedPaymentGateways) !== JSON.stringify(settings.paymentGateways || {})) {
     settings.paymentGateways = mergedPaymentGateways;
+    touched = true;
+  }
+
+  const mergedAuthSecurity = normalizeAuthSecurityInput(settings.authSecurity || {});
+  if (JSON.stringify(mergedAuthSecurity) !== JSON.stringify(settings.authSecurity || {})) {
+    settings.authSecurity = mergedAuthSecurity;
     touched = true;
   }
 
@@ -715,14 +800,118 @@ const applyPaymentGatewayUpdates = (currentSettings, payload) => {
   return next;
 };
 
+const applyAuthSecurityUpdates = (currentSettings, payload) => {
+  const next = normalizeAuthSecurityInput(currentSettings.authSecurity || {});
+  const source = ensureObjectPayload(payload, 'Authentication security');
+  const now = new Date();
+
+  if (Object.keys(source).length === 0) {
+    throw new Error('At least one authentication setting is required');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'sendLoginAlertEmail')) {
+    next.sendLoginAlertEmail = Boolean(source.sendLoginAlertEmail);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'recaptcha')) {
+    const recaptcha = ensureObjectPayload(source.recaptcha, 'reCAPTCHA');
+
+    if (Object.prototype.hasOwnProperty.call(recaptcha, 'enabled')) {
+      next.recaptcha.enabled = Boolean(recaptcha.enabled);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(recaptcha, 'siteKey')) {
+      next.recaptcha.siteKey = trimWithLength(recaptcha.siteKey, 'reCAPTCHA site key', 260);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(recaptcha, 'secretKey')) {
+      const secret = String(recaptcha.secretKey || '').trim();
+      if (!secret) {
+        next.recaptcha.secretKeyEncrypted = '';
+        next.recaptcha.updatedAt = null;
+      } else {
+        if (secret.length > 260) {
+          throw new Error('reCAPTCHA secret key must be 260 characters or less');
+        }
+        next.recaptcha.secretKeyEncrypted = encryptSettingValue(secret);
+        next.recaptcha.updatedAt = now;
+      }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'msg91Smtp')) {
+    const smtp = ensureObjectPayload(source.msg91Smtp, 'MSG91 SMTP');
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'enabled')) {
+      next.msg91Smtp.enabled = Boolean(smtp.enabled);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'host')) {
+      next.msg91Smtp.host = trimWithLength(smtp.host, 'SMTP host', 180) || defaultAuthSecuritySettings.msg91Smtp.host;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'port')) {
+      const port = Number(smtp.port);
+      if (!Number.isFinite(port) || port < 1 || port > 65535) {
+        throw new Error('SMTP port must be between 1 and 65535');
+      }
+      next.msg91Smtp.port = Math.round(port);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'secure')) {
+      next.msg91Smtp.secure = Boolean(smtp.secure);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'username')) {
+      next.msg91Smtp.username = trimWithLength(smtp.username, 'SMTP username', 180);
+      if (!next.msg91Smtp.username) {
+        next.msg91Smtp.passwordEncrypted = '';
+        next.msg91Smtp.updatedAt = null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'fromEmail')) {
+      const fromEmail = trimWithLength(smtp.fromEmail, 'SMTP from email', 180).toLowerCase();
+      if (fromEmail && !emailPattern.test(fromEmail)) {
+        throw new Error('SMTP from email must be a valid email address');
+      }
+      next.msg91Smtp.fromEmail = fromEmail;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'fromName')) {
+      next.msg91Smtp.fromName = trimWithLength(smtp.fromName, 'SMTP from name', 140) || defaultAuthSecuritySettings.msg91Smtp.fromName;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(smtp, 'password')) {
+      const password = String(smtp.password || '').trim();
+      if (!password) {
+        next.msg91Smtp.passwordEncrypted = '';
+        next.msg91Smtp.updatedAt = null;
+      } else {
+        if (!next.msg91Smtp.username) {
+          throw new Error('SMTP username is required before saving password');
+        }
+        if (password.length > 300) {
+          throw new Error('SMTP password must be 300 characters or less');
+        }
+        next.msg91Smtp.passwordEncrypted = encryptSettingValue(password);
+        next.msg91Smtp.updatedAt = now;
+      }
+    }
+  }
+
+  return next;
+};
+
 const updateStoreSettings = async (req, res) => {
   const hasStoreName = Object.prototype.hasOwnProperty.call(req.body || {}, 'storeName');
   const hasFooterText = Object.prototype.hasOwnProperty.call(req.body || {}, 'footerText');
   const hasShowOutOfStockProducts = Object.prototype.hasOwnProperty.call(req.body || {}, 'showOutOfStockProducts');
   const hasTheme = Object.prototype.hasOwnProperty.call(req.body || {}, 'theme');
   const hasPaymentGateways = Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentGateways');
+  const hasAuthSecurity = Object.prototype.hasOwnProperty.call(req.body || {}, 'authSecurity');
 
-  if (!hasStoreName && !hasFooterText && !hasShowOutOfStockProducts && !hasTheme && !hasPaymentGateways) {
+  if (!hasStoreName && !hasFooterText && !hasShowOutOfStockProducts && !hasTheme && !hasPaymentGateways && !hasAuthSecurity) {
     return res.status(400).json({ message: 'No settings fields were provided' });
   }
 
@@ -770,6 +959,14 @@ const updateStoreSettings = async (req, res) => {
       settings.paymentGateways = applyPaymentGatewayUpdates(settings, req.body.paymentGateways);
     } catch (gatewayError) {
       return res.status(400).json({ message: gatewayError.message || 'Invalid payment gateway settings' });
+    }
+  }
+
+  if (hasAuthSecurity) {
+    try {
+      settings.authSecurity = applyAuthSecurityUpdates(settings, req.body.authSecurity);
+    } catch (authSecurityError) {
+      return res.status(400).json({ message: authSecurityError.message || 'Invalid authentication settings' });
     }
   }
 

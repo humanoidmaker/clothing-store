@@ -18,6 +18,9 @@ const AdminSettingsSubnav = () => (
     <Button component={NavLink} to="/admin/settings/payment-gateways" variant="outlined" sx={subNavButtonSx}>
       Payment Gateways
     </Button>
+    <Button component={NavLink} to="/admin/settings/auth-security" variant="outlined" sx={subNavButtonSx}>
+      Auth & Security
+    </Button>
   </Stack>
 );
 

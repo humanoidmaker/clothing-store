@@ -17,15 +17,18 @@ import AdminProductsPage from './pages/AdminProductsPage';
 import AdminReportsPage from './pages/AdminReportsPage';
 import AdminSeoPage from './pages/AdminSeoPage';
 import AdminPaymentGatewaysPage from './pages/AdminPaymentGatewaysPage';
+import AdminAuthSecuritySettingsPage from './pages/AdminAuthSecuritySettingsPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import OrderInvoicePage from './pages/OrderInvoicePage';
 import OrdersPage from './pages/OrdersPage';
 import ProductPage from './pages/ProductPage';
 import RegisterPage from './pages/RegisterPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import UserAccountSettingsPage from './pages/UserAccountSettingsPage';
 import UserBillingProfileSettingsPage from './pages/UserBillingProfileSettingsPage';
 import UserSettingsLayout from './pages/UserSettingsLayout';
@@ -63,6 +66,8 @@ const AppShell = () => {
                         <Route path="/cart" element={<CartPage />} />
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/register" element={<RegisterPage />} />
+                        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                        <Route path="/reset-password" element={<ResetPasswordPage />} />
                         <Route
                           path="/checkout"
                           element={(
@@ -114,6 +119,7 @@ const AppShell = () => {
                           <Route path="orders" element={<AdminOrdersPage />} />
                           <Route path="settings" element={<AdminSettingsPage />} />
                           <Route path="settings/payment-gateways" element={<AdminPaymentGatewaysPage />} />
+                          <Route path="settings/auth-security" element={<AdminAuthSecuritySettingsPage />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

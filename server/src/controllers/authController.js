@@ -1,7 +1,33 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const User = require('../models/User');
+const StoreSettings = require('../models/StoreSettings');
+const { decryptSettingValue } = require('../utils/secureSettings');
 
 const signToken = (userId) => jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
+const LOGIN_MAX_FAILED_ATTEMPTS = 3;
+const LOGIN_LOCK_DURATION_MS = 5 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+const defaultAuthSecuritySettings = StoreSettings.defaultAuthSecuritySettings || {
+  sendLoginAlertEmail: false,
+  recaptcha: {
+    enabled: false,
+    siteKey: '',
+    secretKeyEncrypted: ''
+  },
+  msg91Smtp: {
+    enabled: false,
+    host: 'smtp.msg91.com',
+    port: 587,
+    secure: false,
+    username: '',
+    passwordEncrypted: '',
+    fromEmail: '',
+    fromName: 'Humanoid Maker'
+  }
+};
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -70,6 +96,152 @@ const normalizeTaxDetails = (value = {}) => {
   return tax;
 };
 
+const normalizeAuthSecurityConfig = (value = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    sendLoginAlertEmail:
+      typeof source?.sendLoginAlertEmail === 'boolean'
+        ? source.sendLoginAlertEmail
+        : defaultAuthSecuritySettings.sendLoginAlertEmail,
+    recaptcha: {
+      enabled:
+        typeof source?.recaptcha?.enabled === 'boolean'
+          ? source.recaptcha.enabled
+          : defaultAuthSecuritySettings.recaptcha.enabled,
+      siteKey: String(source?.recaptcha?.siteKey || '').trim(),
+      secretKeyEncrypted: String(source?.recaptcha?.secretKeyEncrypted || '').trim()
+    },
+    msg91Smtp: {
+      enabled:
+        typeof source?.msg91Smtp?.enabled === 'boolean'
+          ? source.msg91Smtp.enabled
+          : defaultAuthSecuritySettings.msg91Smtp.enabled,
+      host: String(source?.msg91Smtp?.host || defaultAuthSecuritySettings.msg91Smtp.host).trim(),
+      port: Number(source?.msg91Smtp?.port || defaultAuthSecuritySettings.msg91Smtp.port),
+      secure:
+        typeof source?.msg91Smtp?.secure === 'boolean'
+          ? source.msg91Smtp.secure
+          : defaultAuthSecuritySettings.msg91Smtp.secure,
+      username: String(source?.msg91Smtp?.username || '').trim(),
+      passwordEncrypted: String(source?.msg91Smtp?.passwordEncrypted || '').trim(),
+      fromEmail: String(source?.msg91Smtp?.fromEmail || '').trim().toLowerCase(),
+      fromName:
+        String(source?.msg91Smtp?.fromName || defaultAuthSecuritySettings.msg91Smtp.fromName).trim() ||
+        defaultAuthSecuritySettings.msg91Smtp.fromName
+    }
+  };
+};
+
+const getAuthSecurityConfig = async () => {
+  const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('authSecurity');
+  return normalizeAuthSecurityConfig(settings?.authSecurity || {});
+};
+
+const decryptSecret = (value) => {
+  const encrypted = String(value || '').trim();
+  if (!encrypted) {
+    return '';
+  }
+  try {
+    return decryptSettingValue(encrypted);
+  } catch {
+    return '';
+  }
+};
+
+const resolveClientBaseUrl = (req) => {
+  const explicit = String(process.env.CLIENT_URL || '').trim();
+  if (explicit) {
+    return explicit.replace(/\/$/, '');
+  }
+  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+};
+
+const verifyRecaptchaIfNeeded = async (token, authSecurity) => {
+  const recaptchaConfig = authSecurity?.recaptcha || {};
+  if (!recaptchaConfig.enabled) {
+    return;
+  }
+
+  const secret = decryptSecret(recaptchaConfig.secretKeyEncrypted);
+  if (!recaptchaConfig.siteKey || !secret) {
+    throw new Error('reCAPTCHA is enabled but not configured in admin settings');
+  }
+  const normalizedToken = trimOrEmpty(token);
+  if (!normalizedToken) {
+    throw new Error('reCAPTCHA verification is required');
+  }
+
+  const body = new URLSearchParams();
+  body.set('secret', secret);
+  body.set('response', normalizedToken);
+
+  let response;
+  try {
+    response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: body.toString()
+    });
+  } catch {
+    throw new Error('Unable to verify reCAPTCHA at this time');
+  }
+
+  if (!response.ok) {
+    throw new Error('Unable to verify reCAPTCHA at this time');
+  }
+
+  let parsed = null;
+  try {
+    parsed = await response.json();
+  } catch {
+    parsed = null;
+  }
+
+  if (!parsed?.success) {
+    throw new Error('reCAPTCHA verification failed');
+  }
+};
+
+const sendSmtpEmail = async (authSecurity, { to, subject, text, html }) => {
+  const smtp = authSecurity?.msg91Smtp || {};
+  if (!smtp.enabled) {
+    return { skipped: true, reason: 'SMTP disabled' };
+  }
+
+  const password = decryptSecret(smtp.passwordEncrypted);
+  const host = trimOrEmpty(smtp.host);
+  const username = trimOrEmpty(smtp.username);
+  const fromEmail = trimOrEmpty(smtp.fromEmail).toLowerCase();
+  const fromName = trimOrEmpty(smtp.fromName) || 'Humanoid Maker';
+
+  if (!host || !username || !password || !fromEmail) {
+    throw new Error('MSG91 SMTP settings are incomplete in admin settings');
+  }
+
+  const transport = nodemailer.createTransport({
+    host,
+    port: Number(smtp.port || 587),
+    secure: Boolean(smtp.secure),
+    auth: {
+      user: username,
+      pass: password
+    }
+  });
+
+  await transport.sendMail({
+    from: `${fromName} <${fromEmail}>`,
+    to,
+    subject,
+    text,
+    html
+  });
+
+  return { skipped: false };
+};
+
 const buildUserResponse = (user) => {
   const shippingAddress = normalizeAddress(user.defaultShippingAddress || {}, {
     fullName: user.name,
@@ -96,10 +268,18 @@ const buildAuthResponse = (user) => ({
 });
 
 const registerUser = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, recaptchaToken } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Name, email and password are required' });
+  }
+
+  let authSecurity;
+  try {
+    authSecurity = await getAuthSecurityConfig();
+    await verifyRecaptchaIfNeeded(recaptchaToken, authSecurity);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'reCAPTCHA verification failed' });
   }
 
   const normalizedEmail = trimOrEmpty(email).toLowerCase();
@@ -113,14 +293,36 @@ const registerUser = async (req, res) => {
   }
 
   const user = await User.create({ name: trimOrEmpty(name), email: normalizedEmail, password });
+
+  if (authSecurity?.msg91Smtp?.enabled) {
+    const safeName = trimOrEmpty(name) || 'there';
+    const storeLabel = trimOrEmpty(process.env.STORE_NAME || 'Humanoid Maker');
+    const subject = `Welcome to ${storeLabel}`;
+    const text = `Hi ${safeName}, your account was created successfully.`;
+    const html = `<p>Hi ${safeName},</p><p>Your account was created successfully.</p>`;
+    try {
+      await sendSmtpEmail(authSecurity, { to: normalizedEmail, subject, text, html });
+    } catch {
+      // Registration should not fail when notification email fails.
+    }
+  }
+
   return res.status(201).json(buildAuthResponse(user));
 };
 
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, recaptchaToken } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  let authSecurity;
+  try {
+    authSecurity = await getAuthSecurityConfig();
+    await verifyRecaptchaIfNeeded(recaptchaToken, authSecurity);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'reCAPTCHA verification failed' });
   }
 
   const normalizedEmail = trimOrEmpty(email).toLowerCase();
@@ -129,9 +331,50 @@ const loginUser = async (req, res) => {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
+  const now = Date.now();
+  const lockUntilTimestamp = user.lockUntil ? new Date(user.lockUntil).getTime() : 0;
+  if (lockUntilTimestamp && lockUntilTimestamp > now) {
+    const remainingSeconds = Math.max(1, Math.ceil((lockUntilTimestamp - now) / 1000));
+    return res.status(423).json({
+      message: `Account temporarily locked. Try again in ${remainingSeconds} seconds.`
+    });
+  }
+
   const isPasswordValid = await user.comparePassword(password);
   if (!isPasswordValid) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+    const nextFailedAttempts = Number(user.failedLoginAttempts || 0) + 1;
+    if (nextFailedAttempts >= LOGIN_MAX_FAILED_ATTEMPTS) {
+      user.failedLoginAttempts = 0;
+      user.lockUntil = new Date(now + LOGIN_LOCK_DURATION_MS);
+      await user.save();
+      return res.status(423).json({
+        message: 'Too many incorrect password attempts. Account locked for 5 minutes.'
+      });
+    }
+
+    user.failedLoginAttempts = nextFailedAttempts;
+    user.lockUntil = null;
+    await user.save();
+    const remainingAttempts = LOGIN_MAX_FAILED_ATTEMPTS - nextFailedAttempts;
+    return res.status(401).json({
+      message: `Invalid credentials. ${remainingAttempts} attempt${remainingAttempts === 1 ? '' : 's'} left before temporary lock.`
+    });
+  }
+
+  user.failedLoginAttempts = 0;
+  user.lockUntil = null;
+  user.lastLoginAt = new Date();
+  await user.save();
+
+  if (authSecurity.sendLoginAlertEmail && authSecurity?.msg91Smtp?.enabled) {
+    const subject = 'New login detected';
+    const text = `Hi ${user.name}, your account was just logged in at ${new Date().toISOString()}.`;
+    const html = `<p>Hi ${user.name},</p><p>Your account was just logged in at ${new Date().toISOString()}.</p>`;
+    try {
+      await sendSmtpEmail(authSecurity, { to: user.email, subject, text, html });
+    } catch {
+      // Login should not fail if notification email fails.
+    }
   }
 
   return res.json(buildAuthResponse(user));
@@ -139,6 +382,99 @@ const loginUser = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
   return res.json(buildUserResponse(req.user));
+};
+
+const forgotPassword = async (req, res) => {
+  const email = trimOrEmpty(req.body?.email || '').toLowerCase();
+  const recaptchaToken = req.body?.recaptchaToken;
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+  if (!emailPattern.test(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address' });
+  }
+
+  let authSecurity;
+  try {
+    authSecurity = await getAuthSecurityConfig();
+    await verifyRecaptchaIfNeeded(recaptchaToken, authSecurity);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'reCAPTCHA verification failed' });
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.json({
+      message: 'If an account exists with this email, password reset instructions have been sent.'
+    });
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+  user.passwordResetTokenHash = tokenHash;
+  user.passwordResetExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await user.save();
+
+  const clientBaseUrl = resolveClientBaseUrl(req);
+  const resetUrl = `${clientBaseUrl}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(resetToken)}`;
+  const subject = 'Reset your password';
+  const text = `Hi ${user.name}, reset your password using this link: ${resetUrl}`;
+  const html = `<p>Hi ${user.name},</p><p>Reset your password using this link:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 15 minutes.</p>`;
+
+  try {
+    await sendSmtpEmail(authSecurity, { to: user.email, subject, text, html });
+  } catch (error) {
+    return res.status(503).json({ message: error.message || 'Unable to send reset email right now' });
+  }
+
+  return res.json({
+    message: 'If an account exists with this email, password reset instructions have been sent.'
+  });
+};
+
+const resetPassword = async (req, res) => {
+  const email = trimOrEmpty(req.body?.email || '').toLowerCase();
+  const token = trimOrEmpty(req.body?.token || '');
+  const newPassword = String(req.body?.newPassword || '');
+  const recaptchaToken = req.body?.recaptchaToken;
+
+  if (!email || !token || !newPassword) {
+    return res.status(400).json({ message: 'Email, token and new password are required' });
+  }
+  if (!emailPattern.test(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  }
+
+  let authSecurity;
+  try {
+    authSecurity = await getAuthSecurityConfig();
+    await verifyRecaptchaIfNeeded(recaptchaToken, authSecurity);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'reCAPTCHA verification failed' });
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const user = await User.findOne({
+    email,
+    passwordResetTokenHash: tokenHash
+  });
+
+  if (!user || !user.passwordResetExpiresAt || new Date(user.passwordResetExpiresAt).getTime() < Date.now()) {
+    return res.status(400).json({ message: 'Reset token is invalid or expired' });
+  }
+
+  user.password = newPassword;
+  user.passwordResetTokenHash = '';
+  user.passwordResetExpiresAt = null;
+  user.failedLoginAttempts = 0;
+  user.lockUntil = null;
+  await user.save();
+
+  return res.json({ message: 'Password has been reset successfully. Please login.' });
 };
 
 const updateCurrentUser = async (req, res) => {
@@ -299,5 +635,7 @@ module.exports = {
   registerUser,
   loginUser,
   getCurrentUser,
+  forgotPassword,
+  resetPassword,
   updateCurrentUser
 };

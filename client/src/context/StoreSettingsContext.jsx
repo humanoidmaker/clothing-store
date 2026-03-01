@@ -6,6 +6,12 @@ const StoreSettingsContext = createContext(null);
 const defaultStoreName = 'Astra Attire';
 const defaultFooterText = 'Premium everyday clothing, delivered across India.';
 const defaultShowOutOfStockProducts = false;
+const defaultAuthSecuritySettings = {
+  recaptcha: {
+    enabled: false,
+    siteKey: ''
+  }
+};
 
 const normalizeStoreName = (value) => String(value || '').trim() || defaultStoreName;
 const normalizeFooterText = (value) => String(value || '').trim() || defaultFooterText;
@@ -14,6 +20,7 @@ export const StoreSettingsProvider = ({ children }) => {
   const [storeName, setStoreName] = useState(defaultStoreName);
   const [footerText, setFooterText] = useState(defaultFooterText);
   const [showOutOfStockProducts, setShowOutOfStockProducts] = useState(defaultShowOutOfStockProducts);
+  const [authSecuritySettings, setAuthSecuritySettings] = useState(defaultAuthSecuritySettings);
   const [themeSettings, setThemeSettings] = useState(defaultThemeSettings);
   const [loading, setLoading] = useState(true);
 
@@ -24,17 +31,25 @@ export const StoreSettingsProvider = ({ children }) => {
       typeof data?.showOutOfStockProducts === 'boolean'
         ? data.showOutOfStockProducts
         : defaultShowOutOfStockProducts;
+    const nextAuthSecuritySettings = {
+      recaptcha: {
+        enabled: Boolean(data?.authSecurity?.recaptcha?.enabled),
+        siteKey: String(data?.authSecurity?.recaptcha?.siteKey || '').trim()
+      }
+    };
     const nextThemeSettings = normalizeThemeSettings(data?.theme || {});
 
     setStoreName(nextStoreName);
     setFooterText(nextFooterText);
     setShowOutOfStockProducts(nextShowOutOfStockProducts);
+    setAuthSecuritySettings(nextAuthSecuritySettings);
     setThemeSettings(nextThemeSettings);
 
     return {
       storeName: nextStoreName,
       footerText: nextFooterText,
       showOutOfStockProducts: nextShowOutOfStockProducts,
+      authSecurity: nextAuthSecuritySettings,
       theme: nextThemeSettings
     };
   }, []);
@@ -48,6 +63,9 @@ export const StoreSettingsProvider = ({ children }) => {
       setFooterText((current) => current || defaultFooterText);
       setShowOutOfStockProducts((current) =>
         typeof current === 'boolean' ? current : defaultShowOutOfStockProducts
+      );
+      setAuthSecuritySettings((current) =>
+        current && typeof current === 'object' ? current : defaultAuthSecuritySettings
       );
       setThemeSettings((current) => normalizeThemeSettings(current || defaultThemeSettings));
     } finally {
@@ -64,6 +82,7 @@ export const StoreSettingsProvider = ({ children }) => {
       storeName: nextStoreName,
       footerText: nextFooterText,
       showOutOfStockProducts: nextShowOutOfStockProducts,
+      authSecurity: nextAuthSecurity,
       theme: nextTheme
     } = {}) => {
       const payload = {};
@@ -78,6 +97,10 @@ export const StoreSettingsProvider = ({ children }) => {
 
       if (nextShowOutOfStockProducts !== undefined) {
         payload.showOutOfStockProducts = Boolean(nextShowOutOfStockProducts);
+      }
+
+      if (nextAuthSecurity !== undefined && nextAuthSecurity && typeof nextAuthSecurity === 'object') {
+        payload.authSecurity = nextAuthSecurity;
       }
 
       if (nextTheme !== undefined) {
@@ -103,6 +126,7 @@ export const StoreSettingsProvider = ({ children }) => {
       storeName,
       footerText,
       showOutOfStockProducts,
+      authSecuritySettings,
       themeSettings,
       loading,
       refreshSettings,
@@ -113,6 +137,7 @@ export const StoreSettingsProvider = ({ children }) => {
       storeName,
       footerText,
       showOutOfStockProducts,
+      authSecuritySettings,
       themeSettings,
       loading,
       refreshSettings,
