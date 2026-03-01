@@ -1,20 +1,10 @@
 const MediaAsset = require('../models/MediaAsset');
-
-const isValidImageUrl = (value) => {
-  const url = String(value || '').trim();
-  if (!url) return false;
-
-  if (url.startsWith('data:image/')) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(url);
-    return ['http:', 'https:'].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-};
+const {
+  saveImageDataUrlToStorage,
+  deleteMediaFileFromStorage,
+  isDataImageUrl,
+  isHttpUrl
+} = require('../utils/mediaStorage');
 
 const normalizeAssetInput = (input = {}) => {
   const name = String(input.name || 'Image').trim().slice(0, 120) || 'Image';
@@ -36,6 +26,22 @@ const toResponse = (asset) => ({
   createdAt: asset.createdAt,
   updatedAt: asset.updatedAt
 });
+
+const deleteAssetFileIfUnused = async (asset) => {
+  const storagePath = String(asset?.storagePath || '').trim();
+  if (!storagePath) {
+    return;
+  }
+
+  const inUseCount = await MediaAsset.countDocuments({
+    storagePath,
+    _id: { $ne: asset._id }
+  });
+
+  if (inUseCount === 0) {
+    await deleteMediaFileFromStorage(storagePath);
+  }
+};
 
 const listMediaAssets = async (req, res) => {
   const queryText = String(req.query.q || '').trim();
@@ -60,16 +66,42 @@ const createMediaAssets = async (req, res) => {
     return res.status(400).json({ message: 'At least one media item is required' });
   }
 
+  const payload = [];
   for (const item of sanitized) {
-    if (!isValidImageUrl(item.url)) {
-      return res.status(400).json({ message: 'Each media item must have a valid image URL or data URL' });
+    if (!item.url) {
+      return res.status(400).json({ message: 'Each media item must include an image URL or data URL' });
     }
-  }
 
-  const payload = sanitized.map((item) => ({
-    ...item,
-    createdBy: req.user?._id
-  }));
+    if (isDataImageUrl(item.url)) {
+      const stored = await saveImageDataUrlToStorage(item.url);
+      payload.push({
+        name: item.name,
+        altText: item.altText,
+        url: stored.url,
+        storagePath: stored.storagePath,
+        sizeBytes: stored.sizeBytes,
+        mimeType: stored.mimeType,
+        source: item.source || 'upload',
+        createdBy: req.user?._id
+      });
+      continue;
+    }
+
+    if (!isHttpUrl(item.url)) {
+      return res.status(400).json({ message: 'Media URL must be a valid http(s) URL or image data URL' });
+    }
+
+    payload.push({
+      name: item.name,
+      altText: item.altText,
+      url: item.url,
+      storagePath: '',
+      sizeBytes: 0,
+      mimeType: item.mimeType,
+      source: item.source || 'external',
+      createdBy: req.user?._id
+    });
+  }
 
   const created = await MediaAsset.insertMany(payload);
   return res.status(201).json(created.map(toResponse));
@@ -83,23 +115,68 @@ const updateMediaAsset = async (req, res) => {
 
   const nextName = req.body?.name !== undefined ? String(req.body.name || '').trim().slice(0, 120) : asset.name;
   const nextAltText = req.body?.altText !== undefined ? String(req.body.altText || '').trim().slice(0, 220) : asset.altText;
-  const nextUrl = req.body?.url !== undefined ? String(req.body.url || '').trim() : asset.url;
-  const nextMimeType = req.body?.mimeType !== undefined ? String(req.body.mimeType || '').trim().slice(0, 120) : asset.mimeType;
   const nextSource = req.body?.source !== undefined ? String(req.body.source || '').trim().slice(0, 40) : asset.source;
+  const hasUrlUpdate = req.body?.url !== undefined;
+  const nextUrlInput = hasUrlUpdate ? String(req.body.url || '').trim() : asset.url;
 
   if (!nextName) {
     return res.status(400).json({ message: 'Media name is required' });
   }
 
-  if (!isValidImageUrl(nextUrl)) {
-    return res.status(400).json({ message: 'Media URL must be a valid image URL or data URL' });
+  if (hasUrlUpdate) {
+    if (!nextUrlInput) {
+      return res.status(400).json({ message: 'Media URL is required' });
+    }
+
+    if (isDataImageUrl(nextUrlInput)) {
+      const stored = await saveImageDataUrlToStorage(nextUrlInput);
+      const previousAssetSnapshot = {
+        _id: asset._id,
+        storagePath: asset.storagePath
+      };
+
+      asset.url = stored.url;
+      asset.storagePath = stored.storagePath;
+      asset.sizeBytes = stored.sizeBytes;
+      asset.mimeType = stored.mimeType;
+      asset.source = nextSource || 'upload';
+      asset.name = nextName;
+      asset.altText = nextAltText;
+      await asset.save();
+
+      await deleteAssetFileIfUnused(previousAssetSnapshot);
+      return res.json(toResponse(asset));
+    }
+
+    if (!isHttpUrl(nextUrlInput)) {
+      return res.status(400).json({ message: 'Media URL must be a valid http(s) URL or image data URL' });
+    }
+
+    const previousAssetSnapshot = {
+      _id: asset._id,
+      storagePath: asset.storagePath
+    };
+
+    asset.url = nextUrlInput;
+    asset.storagePath = '';
+    asset.sizeBytes = 0;
+    asset.mimeType =
+      req.body?.mimeType !== undefined ? String(req.body.mimeType || '').trim().slice(0, 120) : asset.mimeType;
+    asset.source = nextSource || 'external';
+    asset.name = nextName;
+    asset.altText = nextAltText;
+    await asset.save();
+
+    await deleteAssetFileIfUnused(previousAssetSnapshot);
+    return res.json(toResponse(asset));
   }
 
   asset.name = nextName;
   asset.altText = nextAltText;
-  asset.url = nextUrl;
-  asset.mimeType = nextMimeType;
-  asset.source = nextSource || 'upload';
+  asset.source = nextSource || asset.source || 'upload';
+  if (req.body?.mimeType !== undefined) {
+    asset.mimeType = String(req.body.mimeType || '').trim().slice(0, 120);
+  }
   await asset.save();
 
   return res.json(toResponse(asset));
@@ -111,7 +188,13 @@ const deleteMediaAsset = async (req, res) => {
     return res.status(404).json({ message: 'Media asset not found' });
   }
 
+  const previousAssetSnapshot = {
+    _id: asset._id,
+    storagePath: asset.storagePath
+  };
+
   await asset.deleteOne();
+  await deleteAssetFileIfUnused(previousAssetSnapshot);
   return res.json({ message: 'Media asset deleted' });
 };
 

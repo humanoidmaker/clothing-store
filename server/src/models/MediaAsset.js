@@ -20,6 +20,16 @@ const mediaAssetSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    storagePath: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    sizeBytes: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
     mimeType: {
       type: String,
       trim: true,

@@ -9,6 +9,8 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
 - Profit/loss reporting with purchase price support on products and variants
 - SEO controls for default, public-page, and product-level metadata
 - Popup media library with upload, select, preview, and CRUD
+- File-based media storage (`storage/media/YYYY/MM/DD/...`) with URLs in MongoDB
+- Media route protection (rate limiting + hotlink protection) and CDN-ready asset URLs
 - Razorpay payment flow with admin-managed credentials
 
 ## Tech Stack
@@ -67,6 +69,18 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
 - `JWT_SECRET`: long random secret for auth tokens
 - `SETTINGS_ENCRYPTION_SECRET`: secret used to encrypt payment credentials stored in database
 - `NEXT_PUBLIC_API_URL`: API base path (default `/api`)
+- `NEXT_PUBLIC_CDN_BASE_URL`: optional CDN prefix for Next.js static assets
+- `MEDIA_CDN_BASE_URL`: optional CDN base URL for uploaded media file URLs
+- `MEDIA_PUBLIC_BASE_PATH`: public route used to serve local media files (default `/storage/media`)
+- `MEDIA_STORAGE_DIR`: local storage directory for uploaded media files (default `storage/media`)
+- `ASSET_RATE_LIMIT_WINDOW_MS`: rate limit window for static asset traffic
+- `ASSET_RATE_LIMIT_MAX`: max requests per IP/window for regular clients
+- `ASSET_BOT_RATE_LIMIT_MAX`: stricter max requests per IP/window for bot user-agents
+- `PAGE_RATE_LIMIT_WINDOW_MS`: rate limit window for non-API page requests
+- `PAGE_RATE_LIMIT_MAX`: max page requests per IP/window for regular clients
+- `PAGE_BOT_RATE_LIMIT_MAX`: stricter max page requests per IP/window for bot user-agents
+- `ENABLE_HOTLINK_PROTECTION`: block offsite referrers from directly embedding local media (`true`/`false`)
+- `HOTLINK_ALLOWED_DOMAINS`: comma-separated domains allowed to hotlink local media
 
 ## Available Scripts
 
@@ -86,6 +100,8 @@ Change default credentials immediately in any non-local environment.
 
 - Use HTTPS, secure secrets management, rate limits, backups, and monitoring before production use.
 - Configure Razorpay key id/secret in Admin > Settings (stored encrypted in database).
+- Uploaded media files are stored on disk; ensure persistent volume mounting in production.
+- If using external CDN/object storage, set `MEDIA_CDN_BASE_URL` and keep cache TTL high.
 - Review your regional legal, tax, and privacy compliance obligations before launch.
 
 ## Open Source License

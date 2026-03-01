@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const { isDataImageUrl, saveImageDataUrlToStorage } = require('../utils/mediaStorage');
 
 const defaultImage = 'https://placehold.co/600x400?text=Product';
 
@@ -137,6 +138,50 @@ const sortValues = (values) =>
     .map((value) => String(value || '').trim())
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+const persistImageIfNeeded = async (value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  if (isDataImageUrl(normalized)) {
+    const stored = await saveImageDataUrlToStorage(normalized);
+    return stored.url;
+  }
+
+  return normalized;
+};
+
+const persistImageListIfNeeded = async (values) => {
+  const normalized = normalizeImageList(values);
+  const resolved = [];
+
+  for (const image of normalized) {
+    const persisted = await persistImageIfNeeded(image);
+    if (persisted) {
+      resolved.push(persisted);
+    }
+  }
+
+  return resolved;
+};
+
+const persistVariantImagesIfNeeded = async (variants) => {
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return [];
+  }
+
+  const resolvedVariants = [];
+  for (const variant of variants) {
+    resolvedVariants.push({
+      ...variant,
+      images: await persistImageListIfNeeded(variant.images)
+    });
+  }
+
+  return resolvedVariants;
+};
 
 const getProducts = async (req, res) => {
   const {
@@ -322,7 +367,8 @@ const createProduct = async (req, res) => {
   } = req.body;
 
   const normalizedVariants = normalizeVariants(variants);
-  const variantMeta = getVariantMeta(normalizedVariants);
+  const persistedVariants = await persistVariantImagesIfNeeded(normalizedVariants);
+  const variantMeta = getVariantMeta(persistedVariants);
   const hasVariants = Boolean(variantMeta);
 
   if (!name || !description || !category || (!hasVariants && (price === undefined || purchasePrice === undefined))) {
@@ -342,7 +388,9 @@ const createProduct = async (req, res) => {
     return res.status(400).json({ message: 'Purchase price must be a valid positive number' });
   }
 
-  const { primaryImage, finalImages } = resolvePrimaryImage(images, normalizedVariants, image);
+  const persistedImage = await persistImageIfNeeded(image);
+  const persistedImages = await persistImageListIfNeeded(images);
+  const { primaryImage, finalImages } = resolvePrimaryImage(persistedImages, persistedVariants, persistedImage);
 
   const product = await Product.create({
     name,
@@ -354,7 +402,7 @@ const createProduct = async (req, res) => {
     gender,
     sizes: normalizedSizes,
     colors: normalizedColors,
-    variants: normalizedVariants,
+    variants: persistedVariants,
     material,
     fit,
     price: resolvedPrice,
@@ -394,11 +442,11 @@ const updateProduct = async (req, res) => {
   const hasImagesField = Object.prototype.hasOwnProperty.call(req.body, 'images');
 
   if (hasImageField) {
-    product.image = String(req.body.image || '').trim();
+    product.image = await persistImageIfNeeded(req.body.image);
   }
 
   if (hasImagesField) {
-    product.images = normalizeImageList(req.body.images);
+    product.images = await persistImageListIfNeeded(req.body.images);
   }
 
   if (req.body.sizes !== undefined) {
@@ -411,9 +459,10 @@ const updateProduct = async (req, res) => {
 
   if (req.body.variants !== undefined) {
     const normalizedVariants = normalizeVariants(req.body.variants);
-    product.variants = normalizedVariants;
+    const persistedVariants = await persistVariantImagesIfNeeded(normalizedVariants);
+    product.variants = persistedVariants;
 
-    const variantMeta = getVariantMeta(normalizedVariants);
+    const variantMeta = getVariantMeta(persistedVariants);
 
     if (variantMeta) {
       product.sizes = variantMeta.sizes;

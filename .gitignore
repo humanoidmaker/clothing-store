@@ -12,3 +12,4 @@ yarn-error.log*
 .DS_Store
 client/node_modules
 server/node_modules
+storage/
