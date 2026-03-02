@@ -64,6 +64,15 @@ const Navbar = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
 
+  const showMobileSearch = useMemo(() => {
+    const pathname = String(location.pathname || '');
+    if (pathname === '/') return true;
+    if (pathname.startsWith('/products/')) return true;
+    if (pathname === '/wishlist') return true;
+    if (pathname === '/cart') return true;
+    return false;
+  }, [location.pathname]);
+
   const drawerLinks = useMemo(() => {
     const links = [
       { label: 'Shop', to: '/' },
@@ -236,7 +245,7 @@ const Navbar = () => {
             </Stack>
           </Toolbar>
 
-          <Box sx={{ display: { xs: 'block', md: 'none' }, pb: 0.8 }}>
+          <Box sx={{ display: { xs: showMobileSearch ? 'block' : 'none', md: 'none' }, pb: 0.8 }}>
             <Box component="form" onSubmit={onSearchSubmit} sx={{ display: 'flex', gap: 0.6, alignItems: 'center' }}>
               <TextField
                 fullWidth
