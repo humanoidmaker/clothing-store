@@ -48,6 +48,7 @@ const BannerImage = ({ banner, isMobile }) => {
       sx={{
         width: '100%',
         height: '100%',
+        maxHeight: '100%',
         objectFit: 'contain',
         objectPosition: 'center'
       }}
@@ -61,14 +62,20 @@ const BannerLinkWrapper = ({ banner, children }) => {
 
   if (isExternalLink(linkUrl)) {
     return (
-      <Box component="a" href={linkUrl} target="_blank" rel="noreferrer" sx={{ display: 'block', lineHeight: 0 }}>
+      <Box
+        component="a"
+        href={linkUrl}
+        target="_blank"
+        rel="noreferrer"
+        sx={{ display: 'block', lineHeight: 0, height: '100%' }}
+      >
         {children}
       </Box>
     );
   }
 
   return (
-    <Box component={RouterLink} to={linkUrl} sx={{ display: 'block', lineHeight: 0 }}>
+    <Box component={RouterLink} to={linkUrl} sx={{ display: 'block', lineHeight: 0, height: '100%' }}>
       {children}
     </Box>
   );
@@ -117,7 +124,8 @@ const HomepageBannerSlider = ({ sliderSettings }) => {
           position: 'relative',
           px: { xs: 1, sm: 1.2 },
           py: { xs: 0.8, sm: 0.9 },
-          minHeight: { xs: 110, sm: 138, md: 164 }
+          height: { xs: 120, sm: 142, md: 154, lg: 168 },
+          maxHeight: { xs: 120, sm: 142, md: 154, lg: 168 }
         }}
       >
         <BannerLinkWrapper banner={currentBanner}>
