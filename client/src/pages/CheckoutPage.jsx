@@ -154,6 +154,9 @@ const CheckoutPage = () => {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedGateway, setSelectedGateway] = useState('');
   const [codChargePerProduct, setCodChargePerProduct] = useState(DEFAULT_COD_CHARGE_PER_PRODUCT);
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [form, setForm] = useState(() => createCheckoutFormFromUser(user));
 
   const {
@@ -182,7 +185,26 @@ const CheckoutPage = () => {
         : 0,
     [selectedMethod, codChargePerProduct, codProductCount]
   );
-  const totalPayable = useMemo(() => Number(subtotal || 0) + Number(codChargeEstimate || 0), [subtotal, codChargeEstimate]);
+  const couponDiscount = useMemo(
+    () => Math.max(0, Number(appliedCoupon?.discountAmount || 0)),
+    [appliedCoupon]
+  );
+  const discountedSubtotal = useMemo(
+    () => Math.max(0, Number(subtotal || 0) - couponDiscount),
+    [subtotal, couponDiscount]
+  );
+  const totalPayable = useMemo(
+    () => Number(discountedSubtotal || 0) + Number(codChargeEstimate || 0),
+    [discountedSubtotal, codChargeEstimate]
+  );
+
+  const mapCheckoutItems = () =>
+    items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      selectedSize: item.selectedSize,
+      selectedColor: item.selectedColor
+    }));
 
   const buildCheckoutPayload = () => {
     const shippingAddress = {
@@ -199,18 +221,14 @@ const CheckoutPage = () => {
         };
 
     return {
-      items: items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        selectedSize: item.selectedSize,
-        selectedColor: item.selectedColor
-      })),
+      items: mapCheckoutItems(),
       shippingAddress,
       billingDetails,
       taxDetails: {
         ...form.tax
       },
-      codChargesAccepted: Boolean(form.codChargesAccepted)
+      codChargesAccepted: Boolean(form.codChargesAccepted),
+      couponCode: String(appliedCoupon?.code || '').trim()
     };
   };
 
@@ -374,6 +392,50 @@ const CheckoutPage = () => {
       cancelled = true;
     };
   }, [location.search, navigate, clearCart]);
+
+  const onApplyCoupon = async () => {
+    const normalizedCode = normalizeText(couponCodeInput).toUpperCase();
+    if (!normalizedCode) {
+      setError('Please enter a coupon code');
+      return;
+    }
+    if (!canCheckout) {
+      setError('Your cart is empty');
+      return;
+    }
+
+    setError('');
+    setValidatingCoupon(true);
+
+    try {
+      const { data } = await api.post(
+        '/orders/coupon/validate',
+        {
+          items: mapCheckoutItems(),
+          couponCode: normalizedCode
+        },
+        {
+          showSuccessToast: false
+        }
+      );
+      const coupon = data?.coupon;
+      if (!coupon?.code) {
+        throw new Error('Invalid coupon response from server');
+      }
+      setAppliedCoupon(coupon);
+      setCouponCodeInput(String(coupon.code || normalizedCode));
+    } catch (requestError) {
+      setAppliedCoupon(null);
+      setError(requestError.response?.data?.message || requestError.message || 'Could not apply coupon');
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  const onRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCodeInput('');
+  };
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -557,6 +619,16 @@ const CheckoutPage = () => {
                   {formatINR(subtotal)}
                 </Typography>
               </Box>
+              {couponDiscount > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Coupon ({appliedCoupon?.code})
+                  </Typography>
+                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 700 }}>
+                    -{formatINR(couponDiscount)}
+                  </Typography>
+                </Box>
+              )}
               {selectedMethod?.id === 'cash_on_delivery' && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="body2" color="text.secondary">
@@ -600,6 +672,44 @@ const CheckoutPage = () => {
                   ))}
                 </Select>
               </FormControl>
+
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                Coupon Code (Optional)
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Coupon Code"
+                  value={couponCodeInput}
+                  onChange={(event) => {
+                    const nextCode = event.target.value;
+                    setCouponCodeInput(nextCode);
+                    if (appliedCoupon && normalizeText(nextCode).toUpperCase() !== appliedCoupon.code) {
+                      setAppliedCoupon(null);
+                    }
+                  }}
+                  placeholder="e.g. WELCOME10"
+                />
+                <Button
+                  type="button"
+                  variant="outlined"
+                  onClick={onApplyCoupon}
+                  disabled={validatingCoupon || submitting || verifyingRedirect}
+                >
+                  {validatingCoupon ? 'Applying...' : 'Apply'}
+                </Button>
+                {appliedCoupon && (
+                  <Button type="button" variant="text" color="inherit" onClick={onRemoveCoupon}>
+                    Remove
+                  </Button>
+                )}
+              </Stack>
+              {appliedCoupon && (
+                <Alert severity="success">
+                  Coupon {appliedCoupon.code} applied. You save {formatINR(appliedCoupon.discountAmount)}.
+                </Alert>
+              )}
 
               <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                 Shipping Details

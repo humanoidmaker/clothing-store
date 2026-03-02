@@ -102,6 +102,15 @@ const orderSchema = new mongoose.Schema(
       phonepeTransactionId: { type: String },
       phonepeTransactionReference: { type: String }
     },
+    coupon: {
+      couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', default: null },
+      code: { type: String, default: '' },
+      discountType: { type: String, default: '' },
+      discountValue: { type: Number, min: 0, default: 0 },
+      minOrderAmount: { type: Number, min: 0, default: 0 },
+      maxDiscountAmount: { type: Number, min: 0, default: 0 },
+      discountAmount: { type: Number, min: 0, default: 0 }
+    },
     paidAt: {
       type: Date
     },
@@ -112,6 +121,8 @@ const orderSchema = new mongoose.Schema(
     },
     pricing: {
       itemsTotal: { type: Number, min: 0, default: 0 },
+      discountAmount: { type: Number, min: 0, default: 0 },
+      discountedItemsTotal: { type: Number, min: 0, default: 0 },
       codCharge: { type: Number, min: 0, default: 0 },
       finalTotal: { type: Number, min: 0, default: 0 }
     },

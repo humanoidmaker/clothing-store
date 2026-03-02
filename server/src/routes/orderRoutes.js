@@ -5,6 +5,7 @@ const {
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
   getPaymentGatewayOptions,
+  validateCouponForCheckout,
   createPaymentIntent,
   verifyPaymentAndCreateOrder,
   payuCallbackRedirect,
@@ -23,6 +24,7 @@ router.post('/admin/manual-invoice', protect, admin, createManualInvoice);
 router.post('/razorpay/order', protect, createRazorpayOrder);
 router.post('/razorpay/verify', protect, verifyRazorpayPaymentAndCreateOrder);
 router.get('/payment/options', protect, getPaymentGatewayOptions);
+router.post('/coupon/validate', protect, validateCouponForCheckout);
 router.post('/payment/initiate', protect, createPaymentIntent);
 router.post('/payment/verify', protect, verifyPaymentAndCreateOrder);
 router.post('/payment/payu/callback', payuCallbackRedirect);

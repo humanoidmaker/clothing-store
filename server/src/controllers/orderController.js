@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const Coupon = require('../models/Coupon');
 const StoreSettings = require('../models/StoreSettings');
 const User = require('../models/User');
 const { decryptSettingValue } = require('../utils/secureSettings');
@@ -194,6 +195,129 @@ const findVariantIndex = (product, selectedSize, selectedColor) => {
 const normalizeQueryValue = (value) => String(value || '').trim();
 
 const roundCurrency = (value) => Number(Number(value || 0).toFixed(2));
+const normalizeCouponCode = (value) => String(value || '').trim().toUpperCase();
+
+const findCouponByScope = async (couponCode, resellerContext = null) => {
+  const normalizedCode = normalizeCouponCode(couponCode);
+  if (!normalizedCode) {
+    return null;
+  }
+
+  const resellerId = trimOrEmpty(resellerContext?.reseller?.id || '');
+  if (resellerId) {
+    const resellerCoupon = await Coupon.findOne({
+      code: normalizedCode,
+      resellerId
+    });
+    if (resellerCoupon) {
+      return resellerCoupon;
+    }
+  }
+
+  return Coupon.findOne({
+    code: normalizedCode,
+    resellerId: ''
+  });
+};
+
+const calculateCouponDiscountAmount = (coupon, itemsTotal) => {
+  const safeItemsTotal = Math.max(0, Number(itemsTotal || 0));
+  if (!coupon || safeItemsTotal <= 0) {
+    return 0;
+  }
+
+  const discountType = String(coupon.discountType || '').trim().toLowerCase();
+  const discountValue = Number(coupon.discountValue || 0);
+  const maxDiscountAmount = Math.max(0, Number(coupon.maxDiscountAmount || 0));
+
+  let discountAmount = 0;
+  if (discountType === 'percentage') {
+    discountAmount = safeItemsTotal * (Math.max(0, discountValue) / 100);
+  } else {
+    discountAmount = Math.max(0, discountValue);
+  }
+
+  if (maxDiscountAmount > 0) {
+    discountAmount = Math.min(discountAmount, maxDiscountAmount);
+  }
+
+  discountAmount = roundCurrency(discountAmount);
+  return Math.min(discountAmount, safeItemsTotal);
+};
+
+const resolveCouponApplication = async (couponCode, itemsTotal, resellerContext = null) => {
+  const normalizedCode = normalizeCouponCode(couponCode);
+  if (!normalizedCode) {
+    return {
+      coupon: null,
+      discountAmount: 0,
+      snapshot: null
+    };
+  }
+
+  const coupon = await findCouponByScope(normalizedCode, resellerContext);
+  if (!coupon) {
+    return { error: { status: 404, message: 'Coupon code is invalid' } };
+  }
+
+  const now = new Date();
+  if (!coupon.active) {
+    return { error: { status: 400, message: 'Coupon is inactive' } };
+  }
+  if (coupon.startsAt && now < new Date(coupon.startsAt)) {
+    return { error: { status: 400, message: 'Coupon is not active yet' } };
+  }
+  if (coupon.expiresAt && now > new Date(coupon.expiresAt)) {
+    return { error: { status: 400, message: 'Coupon has expired' } };
+  }
+
+  const minimumOrderAmount = Math.max(0, Number(coupon.minOrderAmount || 0));
+  if (Number(itemsTotal || 0) < minimumOrderAmount) {
+    return {
+      error: {
+        status: 400,
+        message: `Coupon requires minimum order amount of INR ${roundCurrency(minimumOrderAmount)}`
+      }
+    };
+  }
+
+  const discountAmount = calculateCouponDiscountAmount(coupon, itemsTotal);
+  if (discountAmount <= 0) {
+    return { error: { status: 400, message: 'Coupon is not applicable on this order' } };
+  }
+
+  return {
+    coupon,
+    discountAmount,
+    snapshot: {
+      couponId: coupon._id,
+      code: normalizeCouponCode(coupon.code),
+      discountType: trimOrEmpty(coupon.discountType || ''),
+      discountValue: roundCurrency(coupon.discountValue || 0),
+      minOrderAmount: roundCurrency(coupon.minOrderAmount || 0),
+      maxDiscountAmount: roundCurrency(coupon.maxDiscountAmount || 0),
+      discountAmount: roundCurrency(discountAmount)
+    }
+  };
+};
+
+const computeOrderPricing = ({ preparedOrder, codCharge = 0, couponApplication = null }) => {
+  const normalizedCodCharge = Number.isFinite(Number(codCharge)) ? Math.max(0, Number(codCharge)) : 0;
+  const itemsTotal = roundCurrency(Number(preparedOrder?.totalPrice || 0));
+  const discountAmount = roundCurrency(
+    Math.min(Math.max(0, Number(couponApplication?.discountAmount || 0)), Math.max(0, itemsTotal))
+  );
+  const discountedItemsTotal = roundCurrency(Math.max(0, itemsTotal - discountAmount));
+  const finalTotal = roundCurrency(discountedItemsTotal + normalizedCodCharge);
+
+  return {
+    itemsTotal,
+    discountAmount,
+    discountedItemsTotal,
+    codCharge: roundCurrency(normalizedCodCharge),
+    finalTotal
+  };
+};
 
 const parseDateBoundary = (value, boundary = 'start') => {
   const rawValue = normalizeQueryValue(value);
@@ -438,6 +562,7 @@ const createStoredOrder = async ({
   taxDetails,
   paymentMethod,
   codCharge = 0,
+  couponApplication = null,
   status = 'pending',
   paidAt,
   paymentResult
@@ -453,9 +578,11 @@ const createStoredOrder = async ({
     return { error: { status: 400, message: error.message || 'Unable to reserve stock for order' } };
   }
 
-  const normalizedCodCharge = Number.isFinite(Number(codCharge)) ? Math.max(0, Number(codCharge)) : 0;
-  const itemsTotal = Number(prepared.totalPrice || 0);
-  const finalTotal = Number((itemsTotal + normalizedCodCharge).toFixed(2));
+  const pricing = computeOrderPricing({
+    preparedOrder: prepared,
+    codCharge,
+    couponApplication
+  });
   const reseller = resellerContext?.reseller || null;
 
   const order = await Order.create({
@@ -465,12 +592,9 @@ const createStoredOrder = async ({
     billingDetails,
     taxDetails,
     paymentMethod,
-    totalPrice: finalTotal,
-    pricing: {
-      itemsTotal,
-      codCharge: normalizedCodCharge,
-      finalTotal
-    },
+    totalPrice: pricing.finalTotal,
+    coupon: couponApplication?.snapshot || undefined,
+    pricing,
     resellerId: trimOrEmpty(reseller?.id || ''),
     resellerName: trimOrEmpty(reseller?.websiteName || reseller?.name || ''),
     resellerDomain: trimOrEmpty(reseller?.primaryDomain || ''),
@@ -616,6 +740,15 @@ const createOrder = async (req, res) => {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
 
+  const couponApplication = await resolveCouponApplication(
+    req.body?.couponCode,
+    prepared.totalPrice,
+    effectiveResellerContext
+  );
+  if (couponApplication.error) {
+    return res.status(couponApplication.error.status).json({ message: couponApplication.error.message });
+  }
+
   const resolvedGateway = normalizeGatewayId(paymentMethod || 'cash_on_delivery');
   let codCharge = 0;
   if (resolvedGateway === 'cash_on_delivery') {
@@ -636,7 +769,8 @@ const createOrder = async (req, res) => {
     billingDetails: checkoutDetails.billingDetails,
     taxDetails: checkoutDetails.taxDetails,
     paymentMethod: paymentMethod || PAYMENT_METHOD_LABELS.cash_on_delivery,
-    codCharge
+    codCharge,
+    couponApplication
   });
 
   if (saved.error) {
@@ -1123,6 +1257,42 @@ const getPaymentGatewayOptions = async (req, res) => {
   });
 };
 
+const validateCouponForCheckout = async (req, res) => {
+  const { items } = req.body || {};
+  const couponCode = normalizeCouponCode(req.body?.couponCode);
+
+  if (!couponCode) {
+    return res.status(400).json({ message: 'Coupon code is required' });
+  }
+
+  const resellerContext = await resolveResellerContext(req);
+  const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
+  const prepared = await prepareOrderItems(items, effectiveResellerContext);
+  if (prepared.error) {
+    return res.status(prepared.error.status).json({ message: prepared.error.message });
+  }
+
+  const couponApplication = await resolveCouponApplication(
+    couponCode,
+    prepared.totalPrice,
+    effectiveResellerContext
+  );
+  if (couponApplication.error) {
+    return res.status(couponApplication.error.status).json({ message: couponApplication.error.message });
+  }
+
+  const pricing = computeOrderPricing({
+    preparedOrder: prepared,
+    couponApplication
+  });
+
+  return res.json({
+    message: 'Coupon applied successfully',
+    coupon: couponApplication.snapshot,
+    pricing
+  });
+};
+
 const createPaymentIntent = async (req, res) => {
   const gateway = normalizeGatewayId(req.body?.gateway);
   const { items } = req.body;
@@ -1143,10 +1313,20 @@ const createPaymentIntent = async (req, res) => {
   if (prepared.error) {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
-  const amountPaise = Math.round(prepared.totalPrice * 100);
-  if (amountPaise < 100) {
-    return res.status(400).json({ message: 'Order amount must be at least INR 1.00' });
+
+  const couponApplication = await resolveCouponApplication(
+    req.body?.couponCode,
+    prepared.totalPrice,
+    effectiveResellerContext
+  );
+  if (couponApplication.error) {
+    return res.status(couponApplication.error.status).json({ message: couponApplication.error.message });
   }
+
+  const pricingWithoutCod = computeOrderPricing({
+    preparedOrder: prepared,
+    couponApplication
+  });
 
   let config;
   try {
@@ -1166,6 +1346,12 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
+    const pricing = computeOrderPricing({
+      preparedOrder: prepared,
+      codCharge,
+      couponApplication
+    });
+
     const saved = await createStoredOrder({
       userId: req.user._id,
       items,
@@ -1175,7 +1361,8 @@ const createPaymentIntent = async (req, res) => {
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
       paymentMethod: PAYMENT_METHOD_LABELS.cash_on_delivery,
-      codCharge
+      codCharge,
+      couponApplication
     });
 
     if (saved.error) {
@@ -1186,8 +1373,15 @@ const createPaymentIntent = async (req, res) => {
       gateway,
       flow: 'direct',
       order: saved.order,
-      codCharge
+      codCharge,
+      coupon: couponApplication.snapshot,
+      pricing
     });
+  }
+
+  const amountPaise = Math.round(pricingWithoutCod.finalTotal * 100);
+  if (amountPaise < 100) {
+    return res.status(400).json({ message: 'Order amount must be at least INR 1.00' });
   }
 
   if (gateway === 'razorpay') {
@@ -1286,7 +1480,7 @@ const createPaymentIntent = async (req, res) => {
       return res.status(502).json({ message: 'Failed to connect with PayPal' });
     }
 
-    const usdAmount = (Number(prepared.totalPrice || 0) / 83).toFixed(2);
+    const usdAmount = (Number(pricingWithoutCod.finalTotal || 0) / 83).toFixed(2);
     const paypalOrderResponse = await fetch(`${paypalBase}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
@@ -1334,7 +1528,7 @@ const createPaymentIntent = async (req, res) => {
 
     const payuBase = config.payu.environment === 'live' ? 'https://secure.payu.in' : 'https://test.payu.in';
     const txnid = `payu_${Date.now()}_${String(req.user._id).slice(-6)}`.slice(0, 30);
-    const amount = Number(prepared.totalPrice).toFixed(2);
+    const amount = Number(pricingWithoutCod.finalTotal).toFixed(2);
     const firstname = String(req.user?.name || 'Customer').trim().split(' ')[0];
     const email = String(req.user?.email || '').trim();
     const productinfo = 'Order Payment';
@@ -1384,7 +1578,7 @@ const createPaymentIntent = async (req, res) => {
       },
       body: JSON.stringify({
         order_id: cashfreeOrderId,
-        order_amount: Number(prepared.totalPrice.toFixed(2)),
+        order_amount: Number(pricingWithoutCod.finalTotal.toFixed(2)),
         order_currency: 'INR',
         customer_details: {
           customer_id: String(req.user._id),
@@ -1489,7 +1683,21 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
   if (prepared.error) {
     return res.status(prepared.error.status).json({ message: prepared.error.message });
   }
-  const expectedAmountPaise = Math.round(prepared.totalPrice * 100);
+
+  const couponApplication = await resolveCouponApplication(
+    req.body?.couponCode,
+    prepared.totalPrice,
+    effectiveResellerContext
+  );
+  if (couponApplication.error) {
+    return res.status(couponApplication.error.status).json({ message: couponApplication.error.message });
+  }
+
+  const pricingWithoutCod = computeOrderPricing({
+    preparedOrder: prepared,
+    couponApplication
+  });
+  const expectedAmountPaise = Math.round(pricingWithoutCod.finalTotal * 100);
 
   let config;
   try {
@@ -1545,6 +1753,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
+      couponApplication,
       paymentMethod: PAYMENT_METHOD_LABELS.razorpay,
       status: 'paid',
       paidAt: new Date(),
@@ -1591,6 +1800,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
+      couponApplication,
       paymentMethod: PAYMENT_METHOD_LABELS.stripe,
       status: 'paid',
       paidAt: new Date(),
@@ -1659,6 +1869,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
+      couponApplication,
       paymentMethod: PAYMENT_METHOD_LABELS.paypal,
       status: 'paid',
       paidAt: new Date(),
@@ -1725,6 +1936,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
+      couponApplication,
       paymentMethod: PAYMENT_METHOD_LABELS.payu,
       status: 'paid',
       paidAt: new Date(),
@@ -1779,6 +1991,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
+      couponApplication,
       paymentMethod: PAYMENT_METHOD_LABELS.cashfree,
       status: 'paid',
       paidAt: new Date(),
@@ -1841,6 +2054,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
       shippingAddress: checkoutDetails.shippingAddress,
       billingDetails: checkoutDetails.billingDetails,
       taxDetails: checkoutDetails.taxDetails,
+      couponApplication,
       paymentMethod: PAYMENT_METHOD_LABELS.phonepe,
       status: 'paid',
       paidAt: new Date(),
@@ -2325,6 +2539,7 @@ module.exports = {
   createRazorpayOrder,
   verifyRazorpayPaymentAndCreateOrder,
   getPaymentGatewayOptions,
+  validateCouponForCheckout,
   createPaymentIntent,
   verifyPaymentAndCreateOrder,
   payuCallbackRedirect,

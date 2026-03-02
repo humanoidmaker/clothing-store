@@ -24,6 +24,11 @@ const AdminSettingsSubnav = () => {
           Payment Gateways
         </Button>
       ) : null}
+      {isAdmin || isResellerAdmin ? (
+        <Button component={NavLink} to="/admin/settings/coupons" variant="outlined" sx={subNavButtonSx}>
+          Coupons
+        </Button>
+      ) : null}
       {isAdmin ? (
         <Button component={NavLink} to="/admin/settings/auth-security" variant="outlined" sx={subNavButtonSx}>
           Auth & Security

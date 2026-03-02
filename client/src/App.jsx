@@ -21,6 +21,7 @@ import AdminPaymentGatewaysPage from './pages/AdminPaymentGatewaysPage';
 import AdminAuthSecuritySettingsPage from './pages/AdminAuthSecuritySettingsPage';
 import AdminResellersPage from './pages/AdminResellersPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
+import AdminCouponsPage from './pages/AdminCouponsPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -134,6 +135,14 @@ const AppShell = () => {
                             element={(
                               <ProtectedRoute adminOrReseller>
                                 <AdminPaymentGatewaysPage />
+                              </ProtectedRoute>
+                            )}
+                          />
+                          <Route
+                            path="settings/coupons"
+                            element={(
+                              <ProtectedRoute adminOrReseller>
+                                <AdminCouponsPage />
                               </ProtectedRoute>
                             )}
                           />

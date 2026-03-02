@@ -133,6 +133,16 @@ const OrderInvoicePage = () => {
     .map((part) => String(part || '').trim())
     .filter(Boolean)
     .join(', ');
+  const pricing = order?.pricing && typeof order.pricing === 'object' ? order.pricing : {};
+  const pricingItemsTotal = Number(pricing.itemsTotal);
+  const displayItemsSubtotal = Number.isFinite(pricingItemsTotal) ? pricingItemsTotal : itemsSubtotal;
+  const couponDiscount = Math.max(0, Number(pricing.discountAmount || order?.coupon?.discountAmount || 0));
+  const pricingDiscountedItemsTotal = Number(pricing.discountedItemsTotal);
+  const displayDiscountedSubtotal = Number.isFinite(pricingDiscountedItemsTotal)
+    ? pricingDiscountedItemsTotal
+    : Math.max(0, displayItemsSubtotal - couponDiscount);
+  const codCharge = Math.max(0, Number(pricing.codCharge || 0));
+  const appliedCouponCode = String(order?.coupon?.code || '').trim();
 
   return (
     <Box>
@@ -339,8 +349,30 @@ const OrderInvoicePage = () => {
           <Stack spacing={0.5} sx={{ ml: 'auto', width: { xs: '100%', sm: 260 } }}>
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">Subtotal</Typography>
-              <Typography variant="body2">{formatINR(itemsSubtotal)}</Typography>
+              <Typography variant="body2">{formatINR(displayItemsSubtotal)}</Typography>
             </Stack>
+            {couponDiscount > 0 && (
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">
+                  Coupon {appliedCouponCode ? `(${appliedCouponCode})` : ''}
+                </Typography>
+                <Typography variant="body2" color="success.main" sx={{ fontWeight: 700 }}>
+                  -{formatINR(couponDiscount)}
+                </Typography>
+              </Stack>
+            )}
+            {(couponDiscount > 0 || codCharge > 0) && (
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Discounted Subtotal</Typography>
+                <Typography variant="body2">{formatINR(displayDiscountedSubtotal)}</Typography>
+              </Stack>
+            )}
+            {codCharge > 0 && (
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">COD Charge</Typography>
+                <Typography variant="body2">{formatINR(codCharge)}</Typography>
+              </Stack>
+            )}
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Total</Typography>
               <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }}>
