@@ -193,6 +193,17 @@ const productSchema = new mongoose.Schema(
     reviews: {
       type: [reviewSchema],
       default: []
+    },
+    resellerId: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true
+    },
+    resellerName: {
+      type: String,
+      trim: true,
+      default: ''
     }
   },
   {

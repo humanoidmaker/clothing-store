@@ -54,6 +54,26 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const trimOrEmpty = (value) => String(value || '').trim();
 const getUserResellerId = (user) => trimOrEmpty(user?.resellerId || '');
 const isResellerScopedUser = (user) => !Boolean(user?.isAdmin) && Boolean(user?.isResellerAdmin) && Boolean(getUserResellerId(user));
+const isGlobalProduct = (product) => !trimOrEmpty(product?.resellerId || '');
+const isProductVisibleInResellerContext = (product, reseller = null) => {
+  if (!reseller) {
+    return isGlobalProduct(product);
+  }
+  if (isGlobalProduct(product)) {
+    return true;
+  }
+  return trimOrEmpty(product?.resellerId || '') === trimOrEmpty(reseller?.id || '');
+};
+const shouldApplyMarginForProduct = (product, reseller = null) => {
+  if (!reseller) {
+    return false;
+  }
+  const productResellerId = trimOrEmpty(product?.resellerId || '');
+  if (productResellerId && productResellerId === trimOrEmpty(reseller?.id || '')) {
+    return false;
+  }
+  return true;
+};
 const buildOrderScopeQuery = (user) => {
   if (isResellerScopedUser(user)) {
     return { resellerId: getUserResellerId(user) };
@@ -268,6 +288,9 @@ const prepareOrderItems = async (items, resellerContext = null) => {
     if (!product) {
       return { error: { status: 404, message: `Product not found: ${productId}` } };
     }
+    if (!isProductVisibleInResellerContext(product, reseller)) {
+      return { error: { status: 404, message: `Product not found: ${productId}` } };
+    }
 
     const quantity = Number(item.quantity || 0);
 
@@ -314,9 +337,11 @@ const prepareOrderItems = async (items, resellerContext = null) => {
       }
     }
 
-    if (reseller) {
+    const baseUnitPriceBeforeResellerMargin = unitPrice;
+    if (shouldApplyMarginForProduct(product, reseller)) {
+      unitPurchasePrice = baseUnitPriceBeforeResellerMargin;
       const marginPercent = getProductMarginPercent(reseller, product._id);
-      unitPrice = applyMarginToAmount(unitPrice, marginPercent);
+      unitPrice = applyMarginToAmount(baseUnitPriceBeforeResellerMargin, marginPercent);
     }
 
     if (availableStock < quantity) {

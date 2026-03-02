@@ -19,6 +19,7 @@ import AdminSettingsSubnav from '../components/AdminSettingsSubnav';
 import PageHeader from '../components/PageHeader';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { defaultThemeSettings, fontFamilyOptions, normalizeThemeSettings } from '../theme';
+import { emitToast } from '../utils/toastBus';
 
 const colorFieldItems = [
   { key: 'primaryColor', label: 'Primary Color' },
@@ -72,6 +73,13 @@ const AdminSettingsPage = () => {
     setSaving(true);
 
     try {
+      if (!String(nameDraft || '').trim()) {
+        throw new Error('Store name is required');
+      }
+      if (!String(footerTextDraft || '').trim()) {
+        throw new Error('Footer text is required');
+      }
+
       const updatedSettings = await updateStoreSettings({
         storeName: nameDraft,
         footerText: footerTextDraft,
@@ -80,7 +88,12 @@ const AdminSettingsPage = () => {
       });
       setSuccess(`Settings updated. Store name: "${updatedSettings.storeName}"`);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || requestError.message || 'Failed to update store settings');
+      const message = requestError.response?.data?.message || requestError.message || 'Failed to update store settings';
+      setError(message);
+      emitToast({
+        severity: 'error',
+        message
+      });
     } finally {
       setSaving(false);
     }
@@ -108,7 +121,7 @@ const AdminSettingsPage = () => {
       )}
 
       <Card>
-        <CardContent component="form" onSubmit={onSubmit} sx={{ p: 1.2 }}>
+        <CardContent component="form" onSubmit={onSubmit} sx={{ p: 1.2 }} noValidate>
           <Stack spacing={1.2}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               Branding
@@ -120,7 +133,6 @@ const AdminSettingsPage = () => {
                 size="small"
                 value={nameDraft}
                 onChange={(event) => setNameDraft(event.target.value)}
-                required
                 inputProps={{ maxLength: 80 }}
                 helperText="Shown in navbar, auth pages, checkout and invoice."
               />
@@ -130,7 +142,6 @@ const AdminSettingsPage = () => {
                 size="small"
                 value={footerTextDraft}
                 onChange={(event) => setFooterTextDraft(event.target.value)}
-                required
                 multiline
                 minRows={2}
                 inputProps={{ maxLength: 220 }}

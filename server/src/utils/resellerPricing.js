@@ -59,6 +59,19 @@ const applyResellerPricingToProduct = (product, reseller) => {
   }
 
   const source = typeof product.toObject === 'function' ? product.toObject() : { ...product };
+  const basePrice = Number(source?.price || 0);
+  const productResellerId = String(source?.resellerId || '').trim();
+  if (productResellerId && productResellerId === String(reseller?.id || '').trim()) {
+    source.pricing = {
+      applied: false,
+      resellerId: reseller.id,
+      resellerName: reseller.name,
+      marginPercent: 0,
+      basePrice,
+      salePrice: Number(source?.price || 0)
+    };
+    return source;
+  }
   const marginPercent = getProductMarginPercent(reseller, source._id);
   const variants = Array.isArray(source.variants) ? source.variants : [];
 
@@ -83,7 +96,9 @@ const applyResellerPricingToProduct = (product, reseller) => {
     applied: true,
     resellerId: reseller.id,
     resellerName: reseller.name,
-    marginPercent
+    marginPercent,
+    basePrice,
+    salePrice: Number(source?.price || 0)
   };
 
   return source;

@@ -45,6 +45,17 @@ const mediaAssetSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
+    },
+    resellerId: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true
+    },
+    resellerName: {
+      type: String,
+      trim: true,
+      default: ''
     }
   },
   {

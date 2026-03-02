@@ -40,7 +40,7 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { formatINR } from '../utils/currency';
-import ResellerProductPricingPage from './ResellerProductPricingPage';
+import { emitToast } from '../utils/toastBus';
 
 const defaultCategoryOptions = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Dresses', 'Jackets', 'Tops', 'Activewear', 'Polos', 'Skirts', 'Shoes'];
 const defaultGenderOptions = ['Men', 'Women', 'Unisex'];
@@ -64,6 +64,15 @@ const imageOptimizationProfiles = {
     minimumQuality: 0.64,
     minimumDimensionAfterCompression: 800
   }
+};
+const maxMarginPercent = 1000;
+const normalizeMarginNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return Number(fallback || 0);
+  }
+  const clamped = Math.min(maxMarginPercent, Math.max(0, parsed));
+  return Number(clamped.toFixed(2));
 };
 const createVariantId = () =>
   (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
@@ -301,7 +310,13 @@ const AdminProductsCatalogPage = () => {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
   const isMobileTable = useMediaQuery(theme.breakpoints.down('sm'));
+  const { isAdmin, isResellerAdmin, resellerId } = useAuth();
   const { storeName } = useStoreSettings();
+  const isResellerScopedCatalog = Boolean(isResellerAdmin && !isAdmin);
+  const normalizedRequesterResellerId = String(resellerId || '').trim();
+  const canMutateProduct = (product) =>
+    !isResellerScopedCatalog || String(product?.resellerId || '').trim() === normalizedRequesterResellerId;
+  const getOwnershipLabel = (product) => (String(product?.resellerId || '').trim() ? 'My Catalog' : 'Main Catalog');
 
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState(() => createInitialForm(storeName));
@@ -323,6 +338,9 @@ const AdminProductsCatalogPage = () => {
     genders: defaultGenderOptions,
     brands: []
   });
+  const [resellerProfile, setResellerProfile] = useState(null);
+  const [productMarginDrafts, setProductMarginDrafts] = useState({});
+  const [savingProductMarginId, setSavingProductMarginId] = useState('');
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
   const [mediaDialogTarget, setMediaDialogTarget] = useState({
     type: 'product',
@@ -417,6 +435,19 @@ const AdminProductsCatalogPage = () => {
     }
   };
 
+  const fetchResellerProfile = async () => {
+    if (!isResellerScopedCatalog) {
+      setResellerProfile(null);
+      return;
+    }
+    try {
+      const { data } = await api.get('/resellers/me', { showSuccessToast: false });
+      setResellerProfile(data?.reseller || null);
+    } catch {
+      setResellerProfile(null);
+    }
+  };
+
   const fetchProducts = async (targetPage = page, targetRowsPerPage = rowsPerPage) => {
     setLoadingProducts(true);
     setError('');
@@ -454,7 +485,10 @@ const AdminProductsCatalogPage = () => {
 
   useEffect(() => {
     fetchCatalogOptions();
-  }, []);
+    if (isResellerScopedCatalog) {
+      void fetchResellerProfile();
+    }
+  }, [isResellerScopedCatalog]);
 
   useEffect(() => {
     fetchProducts(page, rowsPerPage);
@@ -463,6 +497,118 @@ const AdminProductsCatalogPage = () => {
   const onRowsPerPageChange = (nextRowsPerPage) => {
     setRowsPerPage(nextRowsPerPage);
     setPage(1);
+  };
+
+  const isMainCatalogProduct = (product) => String(product?.resellerId || '').trim() === '';
+  const getProductMarginOverrides = () => {
+    if (!resellerProfile || typeof resellerProfile !== 'object') {
+      return {};
+    }
+    const overrides =
+      resellerProfile.productMargins && typeof resellerProfile.productMargins === 'object'
+        ? resellerProfile.productMargins
+        : {};
+    return overrides;
+  };
+  const getEffectiveMarginForProduct = (product) => {
+    if (!isResellerScopedCatalog || !isMainCatalogProduct(product)) {
+      return 0;
+    }
+    const overrides = getProductMarginOverrides();
+    const productId = String(product?._id || '').trim();
+    if (Object.prototype.hasOwnProperty.call(overrides, productId)) {
+      return normalizeMarginNumber(overrides[productId], resellerProfile?.defaultMarginPercent || 0);
+    }
+    return normalizeMarginNumber(resellerProfile?.defaultMarginPercent || 0, 0);
+  };
+  const getMarginDraftForProduct = (product) => {
+    const productId = String(product?._id || '').trim();
+    if (Object.prototype.hasOwnProperty.call(productMarginDrafts, productId)) {
+      return productMarginDrafts[productId];
+    }
+    return String(getEffectiveMarginForProduct(product));
+  };
+  const getPurchasePriceForReseller = (product) => {
+    if (isResellerScopedCatalog && isMainCatalogProduct(product)) {
+      const base = Number(product?.pricing?.basePrice);
+      if (Number.isFinite(base)) {
+        return base;
+      }
+    }
+    return Number(product?.purchasePrice || 0);
+  };
+  const hasMarginOverride = (product) => {
+    const overrides = getProductMarginOverrides();
+    const productId = String(product?._id || '').trim();
+    return Boolean(productId && Object.prototype.hasOwnProperty.call(overrides, productId));
+  };
+
+  const onSaveProductMargin = async (product) => {
+    if (!isResellerScopedCatalog || !isMainCatalogProduct(product)) {
+      return;
+    }
+    const productId = String(product?._id || '').trim();
+    if (!productId) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setSavingProductMarginId(productId);
+    try {
+      const marginPercent = normalizeMarginNumber(getMarginDraftForProduct(product), getEffectiveMarginForProduct(product));
+      await api.put('/resellers/me/margins/products', {
+        updates: [
+          {
+            productId,
+            marginPercent
+          }
+        ]
+      });
+      await fetchResellerProfile();
+      await fetchProducts(page, rowsPerPage);
+      setSuccess('Product margin updated');
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || requestError.message || 'Failed to update product margin');
+    } finally {
+      setSavingProductMarginId('');
+    }
+  };
+
+  const onClearProductMarginOverride = async (product) => {
+    if (!isResellerScopedCatalog || !isMainCatalogProduct(product)) {
+      return;
+    }
+    const productId = String(product?._id || '').trim();
+    if (!productId) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setSavingProductMarginId(productId);
+    try {
+      await api.put('/resellers/me/margins/products', {
+        updates: [
+          {
+            productId,
+            remove: true
+          }
+        ]
+      });
+      setProductMarginDrafts((current) => {
+        const next = { ...current };
+        delete next[productId];
+        return next;
+      });
+      await fetchResellerProfile();
+      await fetchProducts(page, rowsPerPage);
+      setSuccess('Product margin reset to default');
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || requestError.message || 'Failed to reset product margin');
+    } finally {
+      setSavingProductMarginId('');
+    }
   };
 
   const onFieldChange = (event) => {
@@ -675,13 +821,22 @@ const AdminProductsCatalogPage = () => {
       await fetchCatalogOptions();
       await fetchProducts();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || requestError.message || 'Failed to save product');
+      const message = requestError.response?.data?.message || requestError.message || 'Failed to save product';
+      setError(message);
+      emitToast({
+        severity: 'error',
+        message
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const onEdit = (product) => {
+    if (!canMutateProduct(product)) {
+      setError('Main catalog product details are controlled by main admin. Use margin controls to set your sale price.');
+      return;
+    }
     setError('');
     setSuccess('');
     setEditingProductId(product._id);
@@ -692,6 +847,12 @@ const AdminProductsCatalogPage = () => {
   };
 
   const onDelete = async (id) => {
+    const product = products.find((entry) => String(entry?._id || '') === String(id || ''));
+    if (!canMutateProduct(product)) {
+      setError('Main catalog products cannot be deleted by reseller admins. Use margin controls for pricing.');
+      return;
+    }
+
     const shouldDelete = window.confirm('Delete this product?');
     if (!shouldDelete) return;
 
@@ -718,12 +879,17 @@ const AdminProductsCatalogPage = () => {
   return (
     <Box>
       <PageHeader
-        eyebrow="Admin"
+        eyebrow={isResellerScopedCatalog ? 'Reseller' : 'Admin'}
         title="Products Management"
-        subtitle="Upload multiple product images and variant image galleries."
+        subtitle={
+          isResellerScopedCatalog
+            ? 'Main catalog price is your purchase price. Set margin per product to control reseller sale price.'
+            : 'Upload multiple product images and variant image galleries.'
+        }
         actions={
           <Stack direction="row" spacing={0.7}>
             <Chip size="small" label={`Total Products: ${totalItems}`} />
+            {isResellerScopedCatalog ? <Chip size="small" color="info" variant="outlined" label="Main Catalog = Margin Configurable" /> : null}
             <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreateDialog}>
               Create Product
             </Button>
@@ -761,9 +927,18 @@ const AdminProductsCatalogPage = () => {
                       <CardContent sx={{ p: 1 }}>
                         <Stack spacing={0.7}>
                           <Stack direction="row" justifyContent="space-between" spacing={0.8} alignItems="flex-start">
-                            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-                              {product.name}
-                            </Typography>
+                            <Stack spacing={0.3}>
+                              <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                                {product.name}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                label={getOwnershipLabel(product)}
+                                color={String(product?.resellerId || '').trim() ? 'success' : 'default'}
+                                variant="outlined"
+                                sx={{ width: 'fit-content' }}
+                              />
+                            </Stack>
                             <Chip size="small" label={product.gender || '-'} variant="outlined" color="secondary" />
                           </Stack>
 
@@ -776,13 +951,61 @@ const AdminProductsCatalogPage = () => {
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(product.price)}</Typography>
                           </Stack>
                           <Stack direction="row" justifyContent="space-between">
-                            <Typography variant="caption" color="text.secondary">Purchase</Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatINR(product.purchasePrice)}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {isResellerScopedCatalog && isMainCatalogProduct(product) ? 'Purchase (Main Price)' : 'Purchase'}
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              {formatINR(getPurchasePriceForReseller(product))}
+                            </Typography>
                           </Stack>
+                          {isResellerScopedCatalog && isMainCatalogProduct(product) ? (
+                            <Stack direction="row" justifyContent="space-between">
+                              <Typography variant="caption" color="text.secondary">Margin</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                {getEffectiveMarginForProduct(product)}%
+                              </Typography>
+                            </Stack>
+                          ) : null}
                           <Stack direction="row" justifyContent="space-between">
                             <Typography variant="caption" color="text.secondary">Stock</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{product.countInStock}</Typography>
                           </Stack>
+
+                          {isResellerScopedCatalog && isMainCatalogProduct(product) ? (
+                            <Stack direction="row" spacing={0.6}>
+                              <TextField
+                                size="small"
+                                type="number"
+                                label="Margin %"
+                                inputProps={{ min: 0, max: maxMarginPercent, step: 0.01 }}
+                                value={getMarginDraftForProduct(product)}
+                                onChange={(event) =>
+                                  setProductMarginDrafts((current) => ({
+                                    ...current,
+                                    [String(product?._id || '')]: event.target.value
+                                  }))
+                                }
+                                sx={{ flex: 1 }}
+                              />
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                disabled={savingProductMarginId === product._id}
+                                onClick={() => onSaveProductMargin(product)}
+                              >
+                                {savingProductMarginId === product._id ? 'Saving...' : 'Save'}
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="warning"
+                                size="small"
+                                disabled={savingProductMarginId === product._id || !hasMarginOverride(product)}
+                                onClick={() => onClearProductMarginOverride(product)}
+                              >
+                                Reset
+                              </Button>
+                            </Stack>
+                          ) : null}
 
                           <Stack direction="row" spacing={0.6}>
                             <Button
@@ -790,6 +1013,7 @@ const AdminProductsCatalogPage = () => {
                               size="small"
                               fullWidth
                               startIcon={<EditOutlinedIcon />}
+                              disabled={!canMutateProduct(product)}
                               onClick={() => onEdit(product)}
                             >
                               Edit
@@ -804,7 +1028,7 @@ const AdminProductsCatalogPage = () => {
                                   ? <CircularProgress size={14} color="inherit" />
                                   : <DeleteOutlineOutlinedIcon />
                               }
-                              disabled={deletingProductId === product._id}
+                              disabled={deletingProductId === product._id || !canMutateProduct(product)}
                               onClick={() => onDelete(product._id)}
                             >
                               {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
@@ -822,8 +1046,9 @@ const AdminProductsCatalogPage = () => {
                       <TableCell>Name</TableCell>
                       <TableCell>Category</TableCell>
                       <TableCell>Gender</TableCell>
-                      <TableCell align="right">Price</TableCell>
+                      <TableCell align="right">{isResellerScopedCatalog ? 'Sale Price' : 'Price'}</TableCell>
                       <TableCell align="right">Purchase Price</TableCell>
+                      {isResellerScopedCatalog ? <TableCell align="right">Margin %</TableCell> : null}
                       <TableCell align="right">Stock</TableCell>
                       <TableCell align="right">Actions</TableCell>
                     </TableRow>
@@ -831,37 +1056,93 @@ const AdminProductsCatalogPage = () => {
                   <TableBody>
                     {products.map((product) => (
                       <TableRow key={product._id} hover>
-                        <TableCell>{product.name}</TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={0.6} alignItems="center">
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {product.name}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={getOwnershipLabel(product)}
+                              color={String(product?.resellerId || '').trim() ? 'success' : 'default'}
+                              variant="outlined"
+                            />
+                          </Stack>
+                        </TableCell>
                         <TableCell>{product.category}</TableCell>
                         <TableCell>{product.gender}</TableCell>
                         <TableCell align="right">{formatINR(product.price)}</TableCell>
-                        <TableCell align="right">{formatINR(product.purchasePrice)}</TableCell>
+                        <TableCell align="right">{formatINR(getPurchasePriceForReseller(product))}</TableCell>
+                        {isResellerScopedCatalog ? (
+                          <TableCell align="right">
+                            {isMainCatalogProduct(product) ? (
+                              <TextField
+                                size="small"
+                                type="number"
+                                inputProps={{ min: 0, max: maxMarginPercent, step: 0.01 }}
+                                value={getMarginDraftForProduct(product)}
+                                onChange={(event) =>
+                                  setProductMarginDrafts((current) => ({
+                                    ...current,
+                                    [String(product?._id || '')]: event.target.value
+                                  }))
+                                }
+                                sx={{ width: 120 }}
+                              />
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">-</Typography>
+                            )}
+                          </TableCell>
+                        ) : null}
                         <TableCell align="right">{product.countInStock}</TableCell>
                         <TableCell align="right">
-                          <Stack direction="row" spacing={0.6} justifyContent="flex-end">
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<EditOutlinedIcon />}
-                              onClick={() => onEdit(product)}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              color="error"
-                              size="small"
-                              startIcon={
-                                deletingProductId === product._id
-                                  ? <CircularProgress size={14} color="inherit" />
-                                  : <DeleteOutlineOutlinedIcon />
-                              }
-                              disabled={deletingProductId === product._id}
-                              onClick={() => onDelete(product._id)}
-                            >
-                              {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
-                            </Button>
-                          </Stack>
+                          {isResellerScopedCatalog && isMainCatalogProduct(product) ? (
+                            <Stack direction="row" spacing={0.6} justifyContent="flex-end">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                disabled={savingProductMarginId === product._id}
+                                onClick={() => onSaveProductMargin(product)}
+                              >
+                                {savingProductMarginId === product._id ? 'Saving...' : 'Save'}
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="warning"
+                                size="small"
+                                disabled={savingProductMarginId === product._id || !hasMarginOverride(product)}
+                                onClick={() => onClearProductMarginOverride(product)}
+                              >
+                                Reset
+                              </Button>
+                            </Stack>
+                          ) : (
+                            <Stack direction="row" spacing={0.6} justifyContent="flex-end">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<EditOutlinedIcon />}
+                                disabled={!canMutateProduct(product)}
+                                onClick={() => onEdit(product)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="error"
+                                size="small"
+                                startIcon={
+                                  deletingProductId === product._id
+                                    ? <CircularProgress size={14} color="inherit" />
+                                    : <DeleteOutlineOutlinedIcon />
+                                }
+                                disabled={deletingProductId === product._id || !canMutateProduct(product)}
+                                onClick={() => onDelete(product._id)}
+                              >
+                                {deletingProductId === product._id ? 'Deleting...' : 'Delete'}
+                              </Button>
+                            </Stack>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -892,7 +1173,7 @@ const AdminProductsCatalogPage = () => {
         fullWidth
         maxWidth="lg"
       >
-        <Box component="form" onSubmit={onSaveProduct}>
+        <Box component="form" onSubmit={onSaveProduct} noValidate>
           <DialogTitle>{editingProductId ? 'Edit Product' : 'Create Product'}</DialogTitle>
           <DialogContent dividers>
             <Stack spacing={1.2}>
@@ -1198,13 +1479,7 @@ const AdminProductsCatalogPage = () => {
   );
 };
 
-const AdminProductsPage = () => {
-  const { isAdmin, isResellerAdmin } = useAuth();
-  if (isResellerAdmin && !isAdmin) {
-    return <ResellerProductPricingPage />;
-  }
-  return <AdminProductsCatalogPage />;
-};
+const AdminProductsPage = () => <AdminProductsCatalogPage />;
 
 export default AdminProductsPage;
 

@@ -7,6 +7,7 @@ const {
   shouldApplyResellerPricing,
   applyResellerPricingToProduct
 } = require('../utils/resellerPricing');
+const { getResellerById } = require('../utils/resellerStore');
 
 const defaultImage = 'https://placehold.co/600x400?text=Product';
 const SETTINGS_SINGLETON_QUERY = { singletonKey: 'default' };
@@ -14,6 +15,80 @@ const REVIEW_ELIGIBLE_ORDER_STATUSES = ['paid', 'shipped', 'delivered'];
 
 const parseBooleanQueryFlag = (value) =>
   ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+const trimOrEmpty = (value) => String(value || '').trim();
+const isResellerScopedRequester = (user) =>
+  !Boolean(user?.isAdmin) && Boolean(user?.isResellerAdmin) && Boolean(trimOrEmpty(user?.resellerId || ''));
+
+const buildGlobalProductScopeQuery = () => ({
+  $or: [
+    { resellerId: { $exists: false } },
+    { resellerId: '' },
+    { resellerId: null }
+  ]
+});
+
+const resolveEffectiveResellerScopeId = (req, resellerContext = null) => {
+  const requesterResellerId = isResellerScopedRequester(req?.user) ? trimOrEmpty(req.user?.resellerId || '') : '';
+  const hostResellerId = trimOrEmpty(resellerContext?.reseller?.id || '');
+  return requesterResellerId || hostResellerId;
+};
+
+const buildScopedProductQuery = (req, resellerContext = null) => {
+  if (req?.user?.isAdmin) {
+    return {};
+  }
+
+  const resellerScopeId = resolveEffectiveResellerScopeId(req, resellerContext);
+  if (!resellerScopeId) {
+    return buildGlobalProductScopeQuery();
+  }
+
+  return {
+    $or: [
+      ...buildGlobalProductScopeQuery().$or,
+      { resellerId: resellerScopeId }
+    ]
+  };
+};
+
+const mergeFiltersWithScope = (filters, scopeQuery) => {
+  if (!scopeQuery || Object.keys(scopeQuery).length === 0) {
+    return filters;
+  }
+  if (!filters || Object.keys(filters).length === 0) {
+    return scopeQuery;
+  }
+  return {
+    $and: [scopeQuery, filters]
+  };
+};
+
+const isGlobalProduct = (product) => !trimOrEmpty(product?.resellerId || '');
+
+const canMutateProductForRequester = (product, user) => {
+  if (user?.isAdmin) {
+    return true;
+  }
+  if (!isResellerScopedRequester(user)) {
+    return false;
+  }
+  const requesterResellerId = trimOrEmpty(user?.resellerId || '');
+  const productResellerId = trimOrEmpty(product?.resellerId || '');
+  return Boolean(requesterResellerId && productResellerId && requesterResellerId === productResellerId);
+};
+
+const isProductVisibleForRequest = (product, req, resellerContext = null) => {
+  if (req?.user?.isAdmin) {
+    return true;
+  }
+
+  if (isGlobalProduct(product)) {
+    return true;
+  }
+
+  const scopeId = resolveEffectiveResellerScopeId(req, resellerContext);
+  return Boolean(scopeId && trimOrEmpty(product?.resellerId || '') === scopeId);
+};
 
 const buildEffectiveStockExpression = () => ({
   $cond: [
@@ -80,7 +155,8 @@ const sanitizeProductForStorefront = (product, includeOutOfStockProducts) => {
 
 const shouldIncludeOutOfStockProducts = async (req) => {
   const isAdminOverride =
-    Boolean(req.user?.isAdmin) && parseBooleanQueryFlag(req.query?.includeOutOfStock);
+    (Boolean(req.user?.isAdmin) || Boolean(req.user?.isResellerAdmin)) &&
+    parseBooleanQueryFlag(req.query?.includeOutOfStock);
 
   if (isAdminOverride) {
     return true;
@@ -495,6 +571,7 @@ const getProducts = async (req, res) => {
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
   const resellerContext = await resolveResellerContext(req);
   const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
+  const scopedQuery = buildScopedProductQuery(req, resellerContext);
 
   const effectiveStockExpr = buildEffectiveStockExpression();
 
@@ -545,9 +622,10 @@ const getProducts = async (req, res) => {
   const parsedLimit = Number.parseInt(limitQuery, 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 12;
+  const scopedFilters = mergeFiltersWithScope(filters, scopedQuery);
 
   if (applyResellerPriceAdjustments) {
-    const products = await Product.find(filters).sort({ createdAt: -1 });
+    const products = await Product.find(scopedFilters).sort({ createdAt: -1 });
     let visibleProducts = products.map((product) => {
       const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
       const pricedProduct = applyResellerPricingToProduct(visibleProduct, resellerContext.reseller);
@@ -588,12 +666,12 @@ const getProducts = async (req, res) => {
     });
   }
 
-  const totalItems = await Product.countDocuments(filters);
+  const totalItems = await Product.countDocuments(scopedFilters);
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
   const currentPage = Math.min(page, totalPages);
   const skip = (currentPage - 1) * limit;
 
-  const products = await Product.find(filters)
+  const products = await Product.find(scopedFilters)
     .sort(sortBy[sort] || sortBy.newest)
     .skip(skip)
     .limit(limit);
@@ -620,9 +698,11 @@ const getProductFilterOptions = async (req, res) => {
   const visibilityFilters = includeOutOfStockProducts ? {} : { $expr: { $gt: [buildEffectiveStockExpression(), 0] } };
   const resellerContext = await resolveResellerContext(req);
   const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
+  const scopedQuery = buildScopedProductQuery(req, resellerContext);
+  const scopedVisibilityFilters = mergeFiltersWithScope(visibilityFilters, scopedQuery);
 
   if (applyResellerPriceAdjustments) {
-    const products = await Product.find(visibilityFilters).sort({ createdAt: -1 });
+    const products = await Product.find(scopedVisibilityFilters).sort({ createdAt: -1 });
     const categories = new Set();
     const genders = new Set();
     const sizes = new Set();
@@ -674,15 +754,15 @@ const getProductFilterOptions = async (req, res) => {
   }
 
   const [categories, genders, sizes, colors, brands, materials, fits, priceStats] = await Promise.all([
-    Product.distinct('category', visibilityFilters),
-    Product.distinct('gender', visibilityFilters),
-    Product.distinct('sizes', visibilityFilters),
-    Product.distinct('colors', visibilityFilters),
-    Product.distinct('brand', visibilityFilters),
-    Product.distinct('material', visibilityFilters),
-    Product.distinct('fit', visibilityFilters),
+    Product.distinct('category', scopedVisibilityFilters),
+    Product.distinct('gender', scopedVisibilityFilters),
+    Product.distinct('sizes', scopedVisibilityFilters),
+    Product.distinct('colors', scopedVisibilityFilters),
+    Product.distinct('brand', scopedVisibilityFilters),
+    Product.distinct('material', scopedVisibilityFilters),
+    Product.distinct('fit', scopedVisibilityFilters),
     Product.aggregate([
-      ...(includeOutOfStockProducts ? [] : [{ $match: visibilityFilters }]),
+      ...(Object.keys(scopedVisibilityFilters).length > 0 ? [{ $match: scopedVisibilityFilters }] : []),
       {
         $group: {
           _id: null,
@@ -715,12 +795,16 @@ const getProductById = async (req, res) => {
     return res.status(404).json({ message: 'Product not found' });
   }
 
+  const resellerContext = await resolveResellerContext(req);
+  if (!isProductVisibleForRequest(product, req, resellerContext)) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+
   const includeOutOfStockProducts = await shouldIncludeOutOfStockProducts(req);
   if (!includeOutOfStockProducts && getEffectiveProductStock(product) <= 0) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
-  const resellerContext = await resolveResellerContext(req);
   const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
   const visibleProduct = sanitizeProductForStorefront(product, includeOutOfStockProducts);
   const pricedProduct = applyResellerPriceAdjustments
@@ -739,6 +823,9 @@ const createProductReview = async (req, res) => {
   }
 
   const resellerContext = await resolveResellerContext(req);
+  if (!isProductVisibleForRequest(product, req, resellerContext)) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
   const applyResellerPriceAdjustments = shouldApplyResellerPricing(req, resellerContext?.reseller);
   const reviewResellerId = applyResellerPriceAdjustments ? String(resellerContext?.reseller?.id || '').trim() : '';
   const reviewResellerName = applyResellerPriceAdjustments
@@ -881,6 +968,26 @@ const setProductReviewVisibility = async (req, res) => {
 };
 
 const createProduct = async (req, res) => {
+  if (!req.user?.isAdmin && !isResellerScopedRequester(req.user)) {
+    return res.status(403).json({ message: 'Admin or reseller access required' });
+  }
+
+  let ownership = {
+    resellerId: '',
+    resellerName: ''
+  };
+  if (isResellerScopedRequester(req.user)) {
+    const resellerId = trimOrEmpty(req.user?.resellerId || '');
+    const reseller = await getResellerById(resellerId);
+    if (!reseller) {
+      return res.status(404).json({ message: 'Reseller profile not found' });
+    }
+    ownership = {
+      resellerId,
+      resellerName: trimOrEmpty(reseller?.websiteName || reseller?.name || '')
+    };
+  }
+
   const {
     name,
     description,
@@ -940,7 +1047,8 @@ const createProduct = async (req, res) => {
     fit,
     price: resolvedPrice,
     purchasePrice: resolvedPurchasePrice,
-    countInStock: resolvedStock
+    countInStock: resolvedStock,
+    ...ownership
   });
 
   return res.status(201).json(product);
@@ -950,6 +1058,9 @@ const updateProduct = async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+  if (!canMutateProductForRequester(product, req.user)) {
     return res.status(404).json({ message: 'Product not found' });
   }
 
@@ -1019,6 +1130,9 @@ const deleteProduct = async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
+    return res.status(404).json({ message: 'Product not found' });
+  }
+  if (!canMutateProductForRequester(product, req.user)) {
     return res.status(404).json({ message: 'Product not found' });
   }
 

@@ -1,10 +1,58 @@
 const MediaAsset = require('../models/MediaAsset');
+const { getResellerById } = require('../utils/resellerStore');
 const {
   saveImageDataUrlToStorage,
   deleteMediaFileFromStorage,
   isDataImageUrl,
   isHttpUrl
 } = require('../utils/mediaStorage');
+
+const trimOrEmpty = (value) => String(value || '').trim();
+const buildGlobalMediaScopeQuery = () => ({
+  $or: [
+    { resellerId: { $exists: false } },
+    { resellerId: '' },
+    { resellerId: null }
+  ]
+});
+
+const isResellerScopedUser = (user) =>
+  !Boolean(user?.isAdmin) && Boolean(user?.isResellerAdmin) && Boolean(trimOrEmpty(user?.resellerId || ''));
+
+const getMediaScope = async (user = {}) => {
+  if (user?.isAdmin) {
+    return {
+      resellerId: '',
+      resellerName: '',
+      query: buildGlobalMediaScopeQuery()
+    };
+  }
+
+  if (isResellerScopedUser(user)) {
+    const resellerId = trimOrEmpty(user?.resellerId || '');
+    const reseller = await getResellerById(resellerId);
+    return {
+      resellerId,
+      resellerName: trimOrEmpty(reseller?.websiteName || reseller?.name || ''),
+      query: { resellerId }
+    };
+  }
+
+  return {
+    resellerId: '',
+    resellerName: '',
+    query: { _id: { $exists: false } }
+  };
+};
+
+const canAccessAssetForScope = (asset, scope = {}) => {
+  const scopeResellerId = trimOrEmpty(scope?.resellerId || '');
+  const assetResellerId = trimOrEmpty(asset?.resellerId || '');
+  if (!scopeResellerId) {
+    return !assetResellerId;
+  }
+  return assetResellerId === scopeResellerId;
+};
 
 const normalizeAssetInput = (input = {}) => {
   const name = String(input.name || 'Image').trim().slice(0, 120) || 'Image';
@@ -23,6 +71,7 @@ const toResponse = (asset) => ({
   url: asset.url,
   mimeType: asset.mimeType || '',
   source: asset.source || 'upload',
+  resellerId: String(asset.resellerId || '').trim(),
   createdAt: asset.createdAt,
   updatedAt: asset.updatedAt
 });
@@ -44,14 +93,21 @@ const deleteAssetFileIfUnused = async (asset) => {
 };
 
 const listMediaAssets = async (req, res) => {
+  const scope = await getMediaScope(req.user || {});
   const queryText = String(req.query.q || '').trim();
   const limitRaw = Number(req.query.limit || 120);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 500)) : 120;
 
-  const query = {};
+  const query = scope.query && Object.keys(scope.query).length > 0 ? { ...scope.query } : {};
   if (queryText) {
     const pattern = { $regex: queryText, $options: 'i' };
-    query.$or = [{ name: pattern }, { altText: pattern }, { url: pattern }];
+    const searchQuery = { $or: [{ name: pattern }, { altText: pattern }, { url: pattern }] };
+    if (Object.keys(query).length > 0) {
+      query.$and = [scope.query, searchQuery];
+      delete query.$or;
+    } else {
+      query.$or = searchQuery.$or;
+    }
   }
 
   const assets = await MediaAsset.find(query).sort({ updatedAt: -1 }).limit(limit);
@@ -59,6 +115,7 @@ const listMediaAssets = async (req, res) => {
 };
 
 const createMediaAssets = async (req, res) => {
+  const scope = await getMediaScope(req.user || {});
   const items = Array.isArray(req.body?.items) ? req.body.items : [req.body];
   const sanitized = items.map(normalizeAssetInput);
 
@@ -82,7 +139,9 @@ const createMediaAssets = async (req, res) => {
         sizeBytes: stored.sizeBytes,
         mimeType: stored.mimeType,
         source: item.source || 'upload',
-        createdBy: req.user?._id
+        createdBy: req.user?._id,
+        resellerId: scope.resellerId,
+        resellerName: scope.resellerName
       });
       continue;
     }
@@ -99,7 +158,9 @@ const createMediaAssets = async (req, res) => {
       sizeBytes: 0,
       mimeType: item.mimeType,
       source: item.source || 'external',
-      createdBy: req.user?._id
+      createdBy: req.user?._id,
+      resellerId: scope.resellerId,
+      resellerName: scope.resellerName
     });
   }
 
@@ -108,8 +169,12 @@ const createMediaAssets = async (req, res) => {
 };
 
 const updateMediaAsset = async (req, res) => {
+  const scope = await getMediaScope(req.user || {});
   const asset = await MediaAsset.findById(req.params.id);
   if (!asset) {
+    return res.status(404).json({ message: 'Media asset not found' });
+  }
+  if (!canAccessAssetForScope(asset, scope)) {
     return res.status(404).json({ message: 'Media asset not found' });
   }
 
@@ -183,8 +248,12 @@ const updateMediaAsset = async (req, res) => {
 };
 
 const deleteMediaAsset = async (req, res) => {
+  const scope = await getMediaScope(req.user || {});
   const asset = await MediaAsset.findById(req.params.id);
   if (!asset) {
+    return res.status(404).json({ message: 'Media asset not found' });
+  }
+  if (!canAccessAssetForScope(asset, scope)) {
     return res.status(404).json({ message: 'Media asset not found' });
   }
 

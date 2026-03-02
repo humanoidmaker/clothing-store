@@ -5,13 +5,13 @@ const {
   updateMediaAsset,
   deleteMediaAsset
 } = require('../controllers/mediaController');
-const { protect, admin } = require('../middleware/auth');
+const { protect, adminOrReseller } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/', protect, admin, listMediaAssets);
-router.post('/', protect, admin, createMediaAssets);
-router.put('/:id', protect, admin, updateMediaAsset);
-router.delete('/:id', protect, admin, deleteMediaAsset);
+router.get('/', protect, adminOrReseller, listMediaAssets);
+router.post('/', protect, adminOrReseller, createMediaAssets);
+router.put('/:id', protect, adminOrReseller, updateMediaAsset);
+router.delete('/:id', protect, adminOrReseller, deleteMediaAsset);
 
 module.exports = router;
