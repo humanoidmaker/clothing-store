@@ -107,6 +107,15 @@ const Navbar = () => {
       <AppBar position="sticky" sx={{ backgroundColor: 'primary.main', backdropFilter: 'none' }}>
         <Container maxWidth="lg">
           <Toolbar disableGutters sx={{ minHeight: 56 }}>
+            <IconButton
+              sx={{ color: 'common.white', display: { md: 'none' }, ml: -0.8, mr: 0.4 }}
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open navigation"
+              size="small"
+            >
+              <MenuRoundedIcon fontSize="small" />
+            </IconButton>
+
             <Typography
               component={RouterLink}
               to="/"
@@ -224,14 +233,6 @@ const Navbar = () => {
                 </>
               )}
 
-              <IconButton
-                sx={{ color: 'common.white', display: { md: 'none' } }}
-                onClick={() => setDrawerOpen(true)}
-                aria-label="Open navigation"
-                size="small"
-              >
-                <MenuRoundedIcon fontSize="small" />
-              </IconButton>
             </Stack>
           </Toolbar>
 
@@ -273,7 +274,7 @@ const Navbar = () => {
         </Container>
       </AppBar>
 
-      <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+      <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 260 }} role="presentation" onClick={() => setDrawerOpen(false)}>
           <Box sx={{ p: 1.5 }}>
             <Typography variant="subtitle1">Navigation</Typography>
