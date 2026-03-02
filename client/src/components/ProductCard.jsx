@@ -7,7 +7,9 @@ import {
   Chip,
   Rating,
   Stack,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import AddShoppingCartOutlinedIcon from '@mui/icons-material/AddShoppingCartOutlined';
 import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
@@ -21,6 +23,8 @@ import ProductImageViewport from './ProductImageViewport';
 const placeholderImage = 'https://placehold.co/600x400?text=Product';
 
 const ProductCard = ({ product }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
@@ -49,6 +53,10 @@ const ProductCard = ({ product }) => {
     ? product.variants.find((variant) => Array.isArray(variant.images) && variant.images.length > 0)?.images?.[0] || ''
     : '';
   const displayImage = firstProductImage || product.image || firstVariantImage || placeholderImage;
+  const wishlistLabel = wished ? 'Wishlisted' : 'Wishlist';
+  const cartLabel = defaultStock > 0 ? 'Add' : 'Sold Out';
+  const wishlistIcon = wished ? <FavoriteOutlinedIcon /> : <FavoriteBorderOutlinedIcon />;
+  const cartIcon = <AddShoppingCartOutlinedIcon />;
 
   return (
     <Card
@@ -116,20 +124,24 @@ const ProductCard = ({ product }) => {
           variant={wished ? 'contained' : 'outlined'}
           color="secondary"
           fullWidth
-          startIcon={wished ? <FavoriteOutlinedIcon /> : <FavoriteBorderOutlinedIcon />}
+          startIcon={isMobile ? undefined : wishlistIcon}
+          aria-label={wishlistLabel}
           onClick={() => toggleWishlist(product, { selectedSize: defaultSize, selectedColor: defaultColor })}
+          sx={isMobile ? { minWidth: 0, px: 0.5 } : undefined}
         >
-          {wished ? 'Wishlisted' : 'Wishlist'}
+          {isMobile ? wishlistIcon : wishlistLabel}
         </Button>
         <Button
           variant="contained"
           color="primary"
           fullWidth
-          startIcon={<AddShoppingCartOutlinedIcon />}
+          startIcon={isMobile ? undefined : cartIcon}
+          aria-label={cartLabel}
           disabled={defaultStock < 1}
           onClick={() => addToCart(product, 1, defaultSize, defaultColor, defaultPrice, defaultStock)}
+          sx={isMobile ? { minWidth: 0, px: 0.5 } : undefined}
         >
-          {defaultStock > 0 ? 'Add' : 'Sold Out'}
+          {isMobile ? cartIcon : cartLabel}
         </Button>
       </CardActions>
     </Card>

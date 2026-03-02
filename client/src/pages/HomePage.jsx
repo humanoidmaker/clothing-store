@@ -628,7 +628,7 @@ const HomePage = () => {
                   display: 'grid',
                   gap: 1,
                   gridTemplateColumns: {
-                    xs: '1fr',
+                    xs: 'repeat(2, minmax(0, 1fr))',
                     sm: 'repeat(2, minmax(0, 1fr))',
                     lg: 'repeat(3, minmax(0, 1fr))'
                   }
