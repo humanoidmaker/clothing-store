@@ -12,9 +12,37 @@ const defaultAuthSecuritySettings = {
     siteKey: ''
   }
 };
+const defaultHomepageBannerSlider = {
+  enabled: false,
+  banners: []
+};
 
 const normalizeStoreName = (value) => String(value || '').trim() || defaultStoreName;
 const normalizeFooterText = (value) => String(value || '').trim() || defaultFooterText;
+const normalizeBannerSlider = (value = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  const banners = Array.isArray(source.banners) ? source.banners : [];
+
+  return {
+    enabled: Boolean(source.enabled),
+    banners: banners
+      .map((entry, index) => {
+        const item = entry && typeof entry === 'object' ? entry : {};
+        const desktopImage = String(item.desktopImage || '').trim();
+        const mobileImage = String(item.mobileImage || '').trim();
+        if (!desktopImage || !mobileImage) return null;
+
+        return {
+          id: String(item.id || '').trim() || `banner-${index + 1}`,
+          desktopImage,
+          mobileImage,
+          altText: String(item.altText || '').trim(),
+          linkUrl: String(item.linkUrl || '').trim()
+        };
+      })
+      .filter(Boolean)
+  };
+};
 
 export const StoreSettingsProvider = ({ children }) => {
   const [storeName, setStoreName] = useState(defaultStoreName);
@@ -22,6 +50,7 @@ export const StoreSettingsProvider = ({ children }) => {
   const [showOutOfStockProducts, setShowOutOfStockProducts] = useState(defaultShowOutOfStockProducts);
   const [authSecuritySettings, setAuthSecuritySettings] = useState(defaultAuthSecuritySettings);
   const [themeSettings, setThemeSettings] = useState(defaultThemeSettings);
+  const [homepageBannerSlider, setHomepageBannerSlider] = useState(defaultHomepageBannerSlider);
   const [loading, setLoading] = useState(true);
 
   const applySettingsFromResponse = useCallback((data) => {
@@ -38,19 +67,22 @@ export const StoreSettingsProvider = ({ children }) => {
       }
     };
     const nextThemeSettings = normalizeThemeSettings(data?.theme || {});
+    const nextHomepageBannerSlider = normalizeBannerSlider(data?.homepageBannerSlider || {});
 
     setStoreName(nextStoreName);
     setFooterText(nextFooterText);
     setShowOutOfStockProducts(nextShowOutOfStockProducts);
     setAuthSecuritySettings(nextAuthSecuritySettings);
     setThemeSettings(nextThemeSettings);
+    setHomepageBannerSlider(nextHomepageBannerSlider);
 
     return {
       storeName: nextStoreName,
       footerText: nextFooterText,
       showOutOfStockProducts: nextShowOutOfStockProducts,
       authSecurity: nextAuthSecuritySettings,
-      theme: nextThemeSettings
+      theme: nextThemeSettings,
+      homepageBannerSlider: nextHomepageBannerSlider
     };
   }, []);
 
@@ -68,6 +100,7 @@ export const StoreSettingsProvider = ({ children }) => {
         current && typeof current === 'object' ? current : defaultAuthSecuritySettings
       );
       setThemeSettings((current) => normalizeThemeSettings(current || defaultThemeSettings));
+      setHomepageBannerSlider((current) => normalizeBannerSlider(current || defaultHomepageBannerSlider));
     } finally {
       setLoading(false);
     }
@@ -83,7 +116,8 @@ export const StoreSettingsProvider = ({ children }) => {
       footerText: nextFooterText,
       showOutOfStockProducts: nextShowOutOfStockProducts,
       authSecurity: nextAuthSecurity,
-      theme: nextTheme
+      theme: nextTheme,
+      homepageBannerSlider: nextHomepageBannerSlider
     } = {}) => {
       const payload = {};
 
@@ -107,6 +141,10 @@ export const StoreSettingsProvider = ({ children }) => {
         payload.theme = normalizeThemeSettings(nextTheme);
       }
 
+      if (nextHomepageBannerSlider !== undefined) {
+        payload.homepageBannerSlider = normalizeBannerSlider(nextHomepageBannerSlider);
+      }
+
       const { data } = await api.put('/settings', payload);
       return applySettingsFromResponse(data);
     },
@@ -128,6 +166,7 @@ export const StoreSettingsProvider = ({ children }) => {
       showOutOfStockProducts,
       authSecuritySettings,
       themeSettings,
+      homepageBannerSlider,
       loading,
       refreshSettings,
       updateStoreName,
@@ -139,6 +178,7 @@ export const StoreSettingsProvider = ({ children }) => {
       showOutOfStockProducts,
       authSecuritySettings,
       themeSettings,
+      homepageBannerSlider,
       loading,
       refreshSettings,
       updateStoreName,

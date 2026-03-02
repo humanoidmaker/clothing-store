@@ -16,6 +16,20 @@ const imageOptimizationProfiles = {
     initialQuality: 0.82,
     minimumQuality: 0.64,
     minimumDimensionAfterCompression: 800
+  },
+  bannerDesktop: {
+    maxDimension: 1900,
+    targetMaxBytes: 420 * 1024,
+    initialQuality: 0.82,
+    minimumQuality: 0.62,
+    minimumDimensionAfterCompression: 1280
+  },
+  bannerMobile: {
+    maxDimension: 1000,
+    targetMaxBytes: 240 * 1024,
+    initialQuality: 0.8,
+    minimumQuality: 0.6,
+    minimumDimensionAfterCompression: 720
   }
 };
 

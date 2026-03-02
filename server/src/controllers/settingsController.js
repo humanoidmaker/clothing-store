@@ -2,6 +2,7 @@ const StoreSettings = require('../models/StoreSettings');
 const { encryptSettingValue } = require('../utils/secureSettings');
 const { resolveResellerContext } = require('../utils/resellerPricing');
 const { getResellerSettingsById, updateResellerSettingsById } = require('../utils/resellerStore');
+const { isDataImageUrl, isHttpUrl, saveImageDataUrlToStorage } = require('../utils/mediaStorage');
 
 const SINGLETON_QUERY = { singletonKey: 'default' };
 const defaultStoreName = 'Clothing Store';
@@ -10,11 +11,13 @@ const defaultThemeSettings = StoreSettings.defaultThemeSettings;
 const defaultPaymentGatewaySettings = StoreSettings.defaultPaymentGatewaySettings;
 const defaultShowOutOfStockProducts = StoreSettings.defaultShowOutOfStockProducts;
 const defaultAuthSecuritySettings = StoreSettings.defaultAuthSecuritySettings;
+const defaultHomepageBannerSlider = StoreSettings.defaultHomepageBannerSlider || { enabled: false, banners: [] };
 const hexColorPattern = /^#([0-9a-fA-F]{6})$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const cloneGatewayDefaults = () => JSON.parse(JSON.stringify(defaultPaymentGatewaySettings));
 const cloneAuthSecurityDefaults = () => JSON.parse(JSON.stringify(defaultAuthSecuritySettings));
+const cloneHomepageBannerSliderDefaults = () => JSON.parse(JSON.stringify(defaultHomepageBannerSlider));
 
 const normalizeThemeInput = (value = {}) => ({
   primaryColor: String(value.primaryColor || '').trim(),
@@ -72,6 +75,55 @@ const normalizeThemeOutput = (theme = {}) => ({
 
 const normalizeShowOutOfStockProducts = (value) =>
   typeof value === 'boolean' ? value : defaultShowOutOfStockProducts;
+
+const isRelativeAppUrl = (value) => String(value || '').trim().startsWith('/');
+
+const isValidBannerImageUrl = (value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  return isRelativeAppUrl(normalized) || isHttpUrl(normalized);
+};
+
+const normalizeBannerLinkOutput = (value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (isRelativeAppUrl(normalized) || isHttpUrl(normalized)) {
+    return normalized;
+  }
+  return '';
+};
+
+const normalizeHomepageBannerSliderOutput = (value = {}) => {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const banners = Array.isArray(source.banners) ? source.banners : [];
+  const defaultEnabled = Boolean(defaultHomepageBannerSlider.enabled);
+
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : defaultEnabled,
+    banners: banners
+      .map((entry, index) => {
+        const item = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+        const desktopImage = String(item.desktopImage || '').trim();
+        const mobileImage = String(item.mobileImage || '').trim();
+        const altText = String(item.altText || '').trim();
+        const linkUrl = normalizeBannerLinkOutput(item.linkUrl || '');
+        const id = String(item.id || '').trim() || `banner-${index + 1}`;
+
+        if (!isValidBannerImageUrl(desktopImage) || !isValidBannerImageUrl(mobileImage)) {
+          return null;
+        }
+
+        return {
+          id: id.slice(0, 100),
+          desktopImage: desktopImage.slice(0, 700),
+          mobileImage: mobileImage.slice(0, 700),
+          altText: altText.slice(0, 180),
+          linkUrl: linkUrl.slice(0, 700)
+        };
+      })
+      .filter(Boolean)
+  };
+};
 
 const extractSmtpConfig = (source = {}) => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
@@ -364,6 +416,12 @@ const resolveResellerPublicSettings = (settings, resellerContext = null) => {
   const resellerTheme = resellerSettings?.theme && typeof resellerSettings.theme === 'object'
     ? resellerSettings.theme
     : null;
+  const resellerHomepageBannerSlider =
+    resellerSettings?.homepageBannerSlider &&
+    typeof resellerSettings.homepageBannerSlider === 'object' &&
+    !Array.isArray(resellerSettings.homepageBannerSlider)
+      ? resellerSettings.homepageBannerSlider
+      : null;
 
   return {
     storeName: String(resellerSettings?.storeName || reseller?.websiteName || reseller?.name || '').trim() || settings.storeName,
@@ -372,7 +430,10 @@ const resolveResellerPublicSettings = (settings, resellerContext = null) => {
       typeof resellerSettings?.showOutOfStockProducts === 'boolean'
         ? resellerSettings.showOutOfStockProducts
         : normalizeShowOutOfStockProducts(settings.showOutOfStockProducts),
-    theme: normalizeThemeOutput(resellerTheme || settings.theme)
+    theme: normalizeThemeOutput(resellerTheme || settings.theme),
+    homepageBannerSlider: normalizeHomepageBannerSliderOutput(
+      resellerHomepageBannerSlider || settings.homepageBannerSlider || {}
+    )
   };
 };
 
@@ -385,6 +446,7 @@ const buildResponse = (settings, resellerContext = null) => {
     footerText: resolvedPublicSettings.footerText,
     showOutOfStockProducts: resolvedPublicSettings.showOutOfStockProducts,
     theme: resolvedPublicSettings.theme,
+    homepageBannerSlider: resolvedPublicSettings.homepageBannerSlider,
     authSecurity: normalizeAuthSecurityPublicOutput(settings.authSecurity || {}),
     reseller: reseller
       ? {
@@ -442,7 +504,8 @@ const ensureSettings = async () => {
       showOutOfStockProducts: defaultShowOutOfStockProducts,
       theme: defaultThemeSettings,
       paymentGateways: defaultPaymentGatewaySettings,
-      authSecurity: defaultAuthSecuritySettings
+      authSecurity: defaultAuthSecuritySettings,
+      homepageBannerSlider: cloneHomepageBannerSliderDefaults()
     });
     await settings.save();
     return settings;
@@ -490,6 +553,21 @@ const ensureSettings = async () => {
   if (JSON.stringify(mergedAuthSecurity) !== JSON.stringify(settings.authSecurity || {})) {
     settings.authSecurity = mergedAuthSecurity;
     touched = true;
+  }
+
+  if (
+    !settings.homepageBannerSlider ||
+    typeof settings.homepageBannerSlider !== 'object' ||
+    Array.isArray(settings.homepageBannerSlider)
+  ) {
+    settings.homepageBannerSlider = cloneHomepageBannerSliderDefaults();
+    touched = true;
+  } else {
+    const mergedHomepageBannerSlider = normalizeHomepageBannerSliderOutput(settings.homepageBannerSlider || {});
+    if (JSON.stringify(mergedHomepageBannerSlider) !== JSON.stringify(settings.homepageBannerSlider || {})) {
+      settings.homepageBannerSlider = mergedHomepageBannerSlider;
+      touched = true;
+    }
   }
 
   if (touched) {
@@ -552,6 +630,77 @@ const trimWithLength = (value, label, max) => {
     throw new Error(`${label} must be ${max} characters or less`);
   }
   return normalized;
+};
+
+const sanitizeBannerLinkInput = (value, index) => {
+  const normalized = trimWithLength(value || '', `Banner ${index + 1} link URL`, 700);
+  if (!normalized) {
+    return '';
+  }
+  if (isRelativeAppUrl(normalized) || isHttpUrl(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Banner ${index + 1} link URL must start with "/" or be a valid http/https URL`);
+};
+
+const saveBannerImageSource = async (value, label) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    throw new Error(`${label} is required`);
+  }
+
+  if (isDataImageUrl(normalized)) {
+    const saved = await saveImageDataUrlToStorage(normalized);
+    return String(saved.url || '').trim();
+  }
+
+  if (!isValidBannerImageUrl(normalized)) {
+    throw new Error(`${label} must be a valid image URL`);
+  }
+
+  if (normalized.length > 700) {
+    throw new Error(`${label} must be 700 characters or less`);
+  }
+
+  return normalized;
+};
+
+const sanitizeHomepageBannerSliderInput = async (value = {}) => {
+  const source = ensureObjectPayload(value, 'Homepage banner slider');
+  const hasEnabled = Object.prototype.hasOwnProperty.call(source, 'enabled');
+  const hasBanners = Object.prototype.hasOwnProperty.call(source, 'banners');
+
+  if (!hasEnabled && !hasBanners) {
+    throw new Error('Homepage banner slider payload must include enabled or banners');
+  }
+
+  if (hasBanners && !Array.isArray(source.banners)) {
+    throw new Error('Homepage slider banners must be an array');
+  }
+
+  const banners = Array.isArray(source.banners) ? source.banners : [];
+  const normalizedBanners = [];
+  for (let index = 0; index < banners.length; index += 1) {
+    const rawBanner = ensureObjectPayload(banners[index], `Banner ${index + 1}`);
+    const id = trimWithLength(rawBanner.id || `banner-${Date.now()}-${index + 1}`, `Banner ${index + 1} id`, 100);
+    const desktopImage = await saveBannerImageSource(rawBanner.desktopImage, `Banner ${index + 1} desktop image`);
+    const mobileImage = await saveBannerImageSource(rawBanner.mobileImage, `Banner ${index + 1} mobile image`);
+    const altText = trimWithLength(rawBanner.altText || '', `Banner ${index + 1} alt text`, 180);
+    const linkUrl = sanitizeBannerLinkInput(rawBanner.linkUrl || '', index);
+
+    normalizedBanners.push({
+      id,
+      desktopImage,
+      mobileImage,
+      altText,
+      linkUrl
+    });
+  }
+
+  return {
+    enabled: hasEnabled ? Boolean(source.enabled) : Boolean(defaultHomepageBannerSlider.enabled),
+    banners: normalizedBanners
+  };
 };
 
 const applyPaymentGatewayUpdates = (currentSettings, payload) => {
@@ -1036,13 +1185,22 @@ const updateStoreSettings = async (req, res) => {
   const hasFooterText = Object.prototype.hasOwnProperty.call(req.body || {}, 'footerText');
   const hasShowOutOfStockProducts = Object.prototype.hasOwnProperty.call(req.body || {}, 'showOutOfStockProducts');
   const hasTheme = Object.prototype.hasOwnProperty.call(req.body || {}, 'theme');
+  const hasHomepageBannerSlider = Object.prototype.hasOwnProperty.call(req.body || {}, 'homepageBannerSlider');
   const hasPaymentGateways = Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentGateways');
   const hasAuthSecurity = Object.prototype.hasOwnProperty.call(req.body || {}, 'authSecurity');
   const isMainAdmin = Boolean(req.user?.isAdmin);
   const resellerId = String(req.user?.resellerId || '').trim();
   const isResellerAdmin = !isMainAdmin && Boolean(req.user?.isResellerAdmin) && Boolean(resellerId);
 
-  if (!hasStoreName && !hasFooterText && !hasShowOutOfStockProducts && !hasTheme && !hasPaymentGateways && !hasAuthSecurity) {
+  if (
+    !hasStoreName &&
+    !hasFooterText &&
+    !hasShowOutOfStockProducts &&
+    !hasTheme &&
+    !hasHomepageBannerSlider &&
+    !hasPaymentGateways &&
+    !hasAuthSecurity
+  ) {
     return res.status(400).json({ message: 'No settings fields were provided' });
   }
 
@@ -1053,6 +1211,9 @@ const updateStoreSettings = async (req, res) => {
   if (isResellerAdmin) {
     if (hasAuthSecurity) {
       return res.status(403).json({ message: 'Authentication security is managed by main admin' });
+    }
+    if (hasHomepageBannerSlider) {
+      return res.status(403).json({ message: 'Homepage banner slider is managed by main admin' });
     }
 
     const resellerPatch = {};
@@ -1179,6 +1340,14 @@ const updateStoreSettings = async (req, res) => {
       settings.theme = sanitizeTheme(req.body.theme || {});
     } catch (validationError) {
       return res.status(400).json({ message: validationError.message || 'Invalid theme settings' });
+    }
+  }
+
+  if (hasHomepageBannerSlider) {
+    try {
+      settings.homepageBannerSlider = await sanitizeHomepageBannerSliderInput(req.body.homepageBannerSlider || {});
+    } catch (bannerSliderError) {
+      return res.status(400).json({ message: bannerSliderError.message || 'Invalid homepage banner slider settings' });
     }
   }
 

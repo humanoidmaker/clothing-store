@@ -8,18 +8,26 @@ import {
   CircularProgress,
   Divider,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Stack,
   Switch,
   TextField,
   Typography
 } from '@mui/material';
+import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import DesktopWindowsOutlinedIcon from '@mui/icons-material/DesktopWindowsOutlined';
+import PhoneIphoneOutlinedIcon from '@mui/icons-material/PhoneIphoneOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import AdminSettingsSubnav from '../components/AdminSettingsSubnav';
 import PageHeader from '../components/PageHeader';
+import { useAuth } from '../context/AuthContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { defaultThemeSettings, fontFamilyOptions, normalizeThemeSettings } from '../theme';
 import { emitToast } from '../utils/toastBus';
+import { readValidatedImages } from '../utils/imageUpload';
 
 const colorFieldItems = [
   { key: 'primaryColor', label: 'Primary Color' },
@@ -38,22 +46,73 @@ const colorInputSx = {
   }
 };
 
+const homepageBannerPlaceholders = [
+  {
+    desktopImage: '/placeholders/banner-desktop-1.svg',
+    mobileImage: '/placeholders/banner-mobile-1.svg',
+    altText: 'New arrivals and premium seasonal styles'
+  },
+  {
+    desktopImage: '/placeholders/banner-desktop-2.svg',
+    mobileImage: '/placeholders/banner-mobile-2.svg',
+    altText: 'Weekend edit with casual and street-ready outfits'
+  },
+  {
+    desktopImage: '/placeholders/banner-desktop-3.svg',
+    mobileImage: '/placeholders/banner-mobile-3.svg',
+    altText: 'Workwear capsule and elevated essentials'
+  }
+];
+
+const createBannerId = () => `banner-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const normalizeHomepageBannerSliderDraft = (value = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  const banners = Array.isArray(source.banners) ? source.banners : [];
+  return {
+    enabled: Boolean(source.enabled),
+    banners: banners
+      .map((entry, index) => {
+        const item = entry && typeof entry === 'object' ? entry : {};
+        const desktopImage = String(item.desktopImage || '').trim();
+        const mobileImage = String(item.mobileImage || '').trim();
+        if (!desktopImage || !mobileImage) return null;
+
+        return {
+          id: String(item.id || '').trim() || `banner-${index + 1}`,
+          desktopImage,
+          mobileImage,
+          altText: String(item.altText || '').trim(),
+          linkUrl: String(item.linkUrl || '').trim()
+        };
+      })
+      .filter(Boolean)
+  };
+};
+
 const AdminSettingsPage = () => {
-  const { storeName, footerText, showOutOfStockProducts, themeSettings, updateStoreSettings } = useStoreSettings();
+  const { isAdmin } = useAuth();
+  const { storeName, footerText, showOutOfStockProducts, themeSettings, homepageBannerSlider, updateStoreSettings } =
+    useStoreSettings();
   const [nameDraft, setNameDraft] = useState(storeName);
   const [footerTextDraft, setFooterTextDraft] = useState(footerText);
   const [showOutOfStockDraft, setShowOutOfStockDraft] = useState(showOutOfStockProducts);
   const [themeDraft, setThemeDraft] = useState(() => normalizeThemeSettings(themeSettings));
+  const [homepageBannerSliderDraft, setHomepageBannerSliderDraft] = useState(() =>
+    normalizeHomepageBannerSliderDraft(homepageBannerSlider)
+  );
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingBannerKey, setUploadingBannerKey] = useState('');
 
   useEffect(() => {
     setNameDraft(storeName);
     setFooterTextDraft(footerText);
     setShowOutOfStockDraft(showOutOfStockProducts);
     setThemeDraft(normalizeThemeSettings(themeSettings));
-  }, [storeName, footerText, showOutOfStockProducts, themeSettings]);
+    setHomepageBannerSliderDraft(normalizeHomepageBannerSliderDraft(homepageBannerSlider));
+  }, [storeName, footerText, showOutOfStockProducts, themeSettings, homepageBannerSlider]);
 
   const onThemeFieldChange = (field, value) => {
     setThemeDraft((current) => ({
@@ -64,6 +123,78 @@ const AdminSettingsPage = () => {
 
   const onResetTheme = () => {
     setThemeDraft(defaultThemeSettings);
+  };
+
+  const onAddBanner = () => {
+    setHomepageBannerSliderDraft((current) => {
+      const placeholder = homepageBannerPlaceholders[current.banners.length % homepageBannerPlaceholders.length];
+      return {
+        ...current,
+        banners: [
+          ...current.banners,
+          {
+            id: createBannerId(),
+            desktopImage: placeholder.desktopImage,
+            mobileImage: placeholder.mobileImage,
+            altText: placeholder.altText,
+            linkUrl: '/'
+          }
+        ]
+      };
+    });
+  };
+
+  const onRemoveBanner = (bannerId) => {
+    setHomepageBannerSliderDraft((current) => ({
+      ...current,
+      banners: current.banners.filter((banner) => banner.id !== bannerId)
+    }));
+  };
+
+  const onBannerFieldChange = (bannerId, field, value) => {
+    setHomepageBannerSliderDraft((current) => ({
+      ...current,
+      banners: current.banners.map((banner) =>
+        banner.id === bannerId
+          ? {
+              ...banner,
+              [field]: value
+            }
+          : banner
+      )
+    }));
+  };
+
+  const onBannerImageSelect = async (event, bannerId, field, profileKey) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setError('');
+    setSuccess('');
+    setUploadingBannerKey(`${bannerId}:${field}`);
+
+    try {
+      const validated = await readValidatedImages([file], profileKey);
+      const optimizedImage = validated[0]?.dataUrl || '';
+      if (!optimizedImage) {
+        throw new Error('Unable to process selected image');
+      }
+      onBannerFieldChange(bannerId, field, optimizedImage);
+      emitToast({
+        severity: 'success',
+        message: 'Banner image optimized and ready to save.'
+      });
+    } catch (uploadError) {
+      const message = uploadError.message || 'Failed to process banner image';
+      setError(message);
+      emitToast({
+        severity: 'error',
+        message
+      });
+    } finally {
+      setUploadingBannerKey('');
+    }
   };
 
   const onSubmit = async (event) => {
@@ -80,12 +211,20 @@ const AdminSettingsPage = () => {
         throw new Error('Footer text is required');
       }
 
-      const updatedSettings = await updateStoreSettings({
+      const payload = {
         storeName: nameDraft,
         footerText: footerTextDraft,
         showOutOfStockProducts: showOutOfStockDraft,
         theme: themeDraft
-      });
+      };
+      if (isAdmin) {
+        payload.homepageBannerSlider = homepageBannerSliderDraft;
+      }
+
+      const updatedSettings = await updateStoreSettings(payload);
+      if (isAdmin) {
+        setHomepageBannerSliderDraft(normalizeHomepageBannerSliderDraft(updatedSettings.homepageBannerSlider));
+      }
       setSuccess(`Settings updated. Store name: "${updatedSettings.storeName}"`);
     } catch (requestError) {
       const message = requestError.response?.data?.message || requestError.message || 'Failed to update store settings';
@@ -104,7 +243,7 @@ const AdminSettingsPage = () => {
       <PageHeader
         eyebrow="Admin"
         title="Store Settings"
-        subtitle="Update global branding and full website theme (colors + fonts)."
+        subtitle="Update branding, compact homepage banner slider, and full website theme."
       />
 
       <Card sx={{ mb: 1.2 }}>
@@ -164,6 +303,221 @@ const AdminSettingsPage = () => {
               }
               label="Show out-of-stock products across storefront"
             />
+
+            {isAdmin ? (
+              <>
+                <Divider />
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={0.8}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Homepage Banner Slider
+                  </Typography>
+                  <Button
+                    type="button"
+                    size="small"
+                    variant="outlined"
+                    startIcon={<AddRoundedIcon fontSize="small" />}
+                    onClick={onAddBanner}
+                  >
+                    Add Banner
+                  </Button>
+                </Stack>
+
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={homepageBannerSliderDraft.enabled}
+                      onChange={(event) =>
+                        setHomepageBannerSliderDraft((current) => ({
+                          ...current,
+                          enabled: event.target.checked
+                        }))
+                      }
+                    />
+                  }
+                  label="Enable compact homepage banner slider"
+                />
+
+                <Alert severity="info" sx={{ py: 0.2 }}>
+                  Upload desktop and mobile banners separately. Images are automatically compressed before saving.
+                </Alert>
+
+                {homepageBannerSliderDraft.banners.length === 0 ? (
+                  <Alert severity="warning">No banners added yet. Click "Add Banner" to create one.</Alert>
+                ) : (
+                  <Stack spacing={0.9}>
+                    {homepageBannerSliderDraft.banners.map((banner, index) => {
+                      const desktopUploading = uploadingBannerKey === `${banner.id}:desktopImage`;
+                      const mobileUploading = uploadingBannerKey === `${banner.id}:mobileImage`;
+
+                      return (
+                        <Card key={banner.id} variant="outlined">
+                          <CardContent sx={{ p: 1 }}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.8 }}>
+                              <Typography variant="subtitle2">Banner {index + 1}</Typography>
+                              <IconButton
+                                aria-label={`Remove banner ${index + 1}`}
+                                size="small"
+                                onClick={() => onRemoveBanner(banner.id)}
+                              >
+                                <DeleteOutlineRoundedIcon fontSize="small" />
+                              </IconButton>
+                            </Stack>
+
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gap: 0.9,
+                                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }
+                              }}
+                            >
+                              <Box>
+                                <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mb: 0.5 }}>
+                                  <DesktopWindowsOutlinedIcon fontSize="small" color="action" />
+                                  <Typography variant="caption" color="text.secondary">
+                                    Desktop Banner
+                                  </Typography>
+                                </Stack>
+                                <Box
+                                  sx={{
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: 1,
+                                    minHeight: 86,
+                                    display: 'grid',
+                                    placeItems: 'center',
+                                    p: 0.6,
+                                    bgcolor: 'background.default',
+                                    mb: 0.6
+                                  }}
+                                >
+                                  {banner.desktopImage ? (
+                                    <Box
+                                      component="img"
+                                      src={banner.desktopImage}
+                                      alt={banner.altText || `Banner ${index + 1} desktop`}
+                                      sx={{ maxWidth: '100%', maxHeight: 78, objectFit: 'contain' }}
+                                    />
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">
+                                      No desktop image
+                                    </Typography>
+                                  )}
+                                </Box>
+                                <Button
+                                  component="label"
+                                  type="button"
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={
+                                    desktopUploading ? (
+                                      <CircularProgress size={12} color="inherit" />
+                                    ) : (
+                                      <AddPhotoAlternateOutlinedIcon fontSize="small" />
+                                    )
+                                  }
+                                  disabled={desktopUploading || mobileUploading}
+                                >
+                                  {desktopUploading ? 'Processing...' : 'Upload Desktop'}
+                                  <input
+                                    hidden
+                                    type="file"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                                    onChange={(event) => onBannerImageSelect(event, banner.id, 'desktopImage', 'bannerDesktop')}
+                                  />
+                                </Button>
+                              </Box>
+
+                              <Box>
+                                <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mb: 0.5 }}>
+                                  <PhoneIphoneOutlinedIcon fontSize="small" color="action" />
+                                  <Typography variant="caption" color="text.secondary">
+                                    Mobile Banner
+                                  </Typography>
+                                </Stack>
+                                <Box
+                                  sx={{
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: 1,
+                                    minHeight: 86,
+                                    display: 'grid',
+                                    placeItems: 'center',
+                                    p: 0.6,
+                                    bgcolor: 'background.default',
+                                    mb: 0.6
+                                  }}
+                                >
+                                  {banner.mobileImage ? (
+                                    <Box
+                                      component="img"
+                                      src={banner.mobileImage}
+                                      alt={banner.altText || `Banner ${index + 1} mobile`}
+                                      sx={{ maxWidth: '100%', maxHeight: 78, objectFit: 'contain' }}
+                                    />
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">
+                                      No mobile image
+                                    </Typography>
+                                  )}
+                                </Box>
+                                <Button
+                                  component="label"
+                                  type="button"
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={
+                                    mobileUploading ? (
+                                      <CircularProgress size={12} color="inherit" />
+                                    ) : (
+                                      <AddPhotoAlternateOutlinedIcon fontSize="small" />
+                                    )
+                                  }
+                                  disabled={desktopUploading || mobileUploading}
+                                >
+                                  {mobileUploading ? 'Processing...' : 'Upload Mobile'}
+                                  <input
+                                    hidden
+                                    type="file"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                                    onChange={(event) => onBannerImageSelect(event, banner.id, 'mobileImage', 'bannerMobile')}
+                                  />
+                                </Button>
+                              </Box>
+                            </Box>
+
+                            <Box
+                              sx={{
+                                mt: 0.9,
+                                display: 'grid',
+                                gap: 0.8,
+                                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }
+                              }}
+                            >
+                              <TextField
+                                size="small"
+                                label="Alt Text"
+                                value={banner.altText}
+                                onChange={(event) => onBannerFieldChange(banner.id, 'altText', event.target.value)}
+                                inputProps={{ maxLength: 180 }}
+                              />
+                              <TextField
+                                size="small"
+                                label="Link URL (optional)"
+                                placeholder="/ or https://example.com/collection"
+                                value={banner.linkUrl}
+                                onChange={(event) => onBannerFieldChange(banner.id, 'linkUrl', event.target.value)}
+                                inputProps={{ maxLength: 700 }}
+                              />
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </>
+            ) : null}
 
             <Divider />
 

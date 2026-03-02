@@ -100,6 +100,32 @@ const defaultAuthSecuritySettings = {
     updatedAt: null
   }
 };
+const defaultHomepageBannerSlider = {
+  enabled: false,
+  banners: [
+    {
+      id: 'new-arrivals',
+      desktopImage: '/placeholders/banner-desktop-1.svg',
+      mobileImage: '/placeholders/banner-mobile-1.svg',
+      altText: 'New arrivals in seasonal clothing and accessories',
+      linkUrl: '/'
+    },
+    {
+      id: 'weekend-edit',
+      desktopImage: '/placeholders/banner-desktop-2.svg',
+      mobileImage: '/placeholders/banner-mobile-2.svg',
+      altText: 'Weekend edit featuring modern street and casual styles',
+      linkUrl: '/'
+    },
+    {
+      id: 'workwear-capsule',
+      desktopImage: '/placeholders/banner-desktop-3.svg',
+      mobileImage: '/placeholders/banner-mobile-3.svg',
+      altText: 'Compact workwear capsule for everyday outfits',
+      linkUrl: '/'
+    }
+  ]
+};
 
 const storeSettingsSchema = new mongoose.Schema(
   {
@@ -458,6 +484,46 @@ const storeSettingsSchema = new mongoose.Schema(
         }
       }
     },
+    homepageBannerSlider: {
+      enabled: {
+        type: Boolean,
+        default: defaultHomepageBannerSlider.enabled
+      },
+      banners: [
+        {
+          id: {
+            type: String,
+            trim: true,
+            default: '',
+            maxlength: 100
+          },
+          desktopImage: {
+            type: String,
+            trim: true,
+            default: '',
+            maxlength: 700
+          },
+          mobileImage: {
+            type: String,
+            trim: true,
+            default: '',
+            maxlength: 700
+          },
+          altText: {
+            type: String,
+            trim: true,
+            default: '',
+            maxlength: 180
+          },
+          linkUrl: {
+            type: String,
+            trim: true,
+            default: '',
+            maxlength: 700
+          }
+        }
+      ]
+    },
     // Legacy field retained for backward migration into paymentGateways.razorpay.
     razorpay: {
       keyId: {
@@ -487,6 +553,7 @@ storeSettingsSchema.statics.defaultRazorpaySettings = defaultRazorpaySettings;
 storeSettingsSchema.statics.defaultPaymentGatewaySettings = defaultPaymentGatewaySettings;
 storeSettingsSchema.statics.defaultShowOutOfStockProducts = defaultShowOutOfStockProducts;
 storeSettingsSchema.statics.defaultAuthSecuritySettings = defaultAuthSecuritySettings;
+storeSettingsSchema.statics.defaultHomepageBannerSlider = defaultHomepageBannerSlider;
 
 module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
 

@@ -26,9 +26,11 @@ import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import { useSearchParams } from 'react-router-dom';
 import AppPagination from '../components/AppPagination';
+import HomepageBannerSlider from '../components/HomepageBannerSlider';
 import PageHeader from '../components/PageHeader';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import { formatINR } from '../utils/currency';
 
 const defaultPriceRange = [500, 8000];
@@ -72,6 +74,7 @@ const fallbackFilterOptions = {
 const HomePage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { homepageBannerSlider } = useStoreSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -516,6 +519,8 @@ const HomePage = () => {
           </Typography>
         </Stack>
       </Paper>
+
+      <HomepageBannerSlider sliderSettings={homepageBannerSlider} />
 
       <PageHeader
         eyebrow="Store"
