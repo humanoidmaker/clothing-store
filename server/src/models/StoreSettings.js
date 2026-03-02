@@ -126,6 +126,15 @@ const defaultHomepageBannerSlider = {
     }
   ]
 };
+const defaultHomepageStyleDeskBar = {
+  enabled: true,
+  title: 'STYLE DESK',
+  subtitle: 'New drops weekly • curated for compact browsing',
+  backgroundColor: '#ffffff',
+  accentColor: '#b54d66',
+  titleColor: '#1d2230',
+  subtitleColor: '#5e6472'
+};
 
 const storeSettingsSchema = new mongoose.Schema(
   {
@@ -524,6 +533,44 @@ const storeSettingsSchema = new mongoose.Schema(
         }
       ]
     },
+    homepageStyleDeskBar: {
+      enabled: {
+        type: Boolean,
+        default: defaultHomepageStyleDeskBar.enabled
+      },
+      title: {
+        type: String,
+        trim: true,
+        default: defaultHomepageStyleDeskBar.title,
+        maxlength: 80
+      },
+      subtitle: {
+        type: String,
+        trim: true,
+        default: defaultHomepageStyleDeskBar.subtitle,
+        maxlength: 180
+      },
+      backgroundColor: {
+        type: String,
+        trim: true,
+        default: defaultHomepageStyleDeskBar.backgroundColor
+      },
+      accentColor: {
+        type: String,
+        trim: true,
+        default: defaultHomepageStyleDeskBar.accentColor
+      },
+      titleColor: {
+        type: String,
+        trim: true,
+        default: defaultHomepageStyleDeskBar.titleColor
+      },
+      subtitleColor: {
+        type: String,
+        trim: true,
+        default: defaultHomepageStyleDeskBar.subtitleColor
+      }
+    },
     // Legacy field retained for backward migration into paymentGateways.razorpay.
     razorpay: {
       keyId: {
@@ -554,6 +601,7 @@ storeSettingsSchema.statics.defaultPaymentGatewaySettings = defaultPaymentGatewa
 storeSettingsSchema.statics.defaultShowOutOfStockProducts = defaultShowOutOfStockProducts;
 storeSettingsSchema.statics.defaultAuthSecuritySettings = defaultAuthSecuritySettings;
 storeSettingsSchema.statics.defaultHomepageBannerSlider = defaultHomepageBannerSlider;
+storeSettingsSchema.statics.defaultHomepageStyleDeskBar = defaultHomepageStyleDeskBar;
 
 module.exports = mongoose.models.StoreSettings || mongoose.model('StoreSettings', storeSettingsSchema);
 

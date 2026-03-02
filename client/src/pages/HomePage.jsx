@@ -70,11 +70,20 @@ const fallbackFilterOptions = {
   materials: ['All'],
   fits: ['All']
 };
+const defaultStyleDeskBar = {
+  enabled: true,
+  title: 'STYLE DESK',
+  subtitle: 'New drops weekly • curated for compact browsing',
+  backgroundColor: '#ffffff',
+  accentColor: '#b54d66',
+  titleColor: '#1d2230',
+  subtitleColor: '#5e6472'
+};
 
 const HomePage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { homepageBannerSlider } = useStoreSettings();
+  const { homepageStyleDeskBar, homepageBannerSlider } = useStoreSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -230,6 +239,14 @@ const HomePage = () => {
     setRowsPerPage(nextRowsPerPage);
     setPage(1);
   };
+
+  const styleDeskBar = useMemo(
+    () => ({
+      ...defaultStyleDeskBar,
+      ...(homepageStyleDeskBar || {})
+    }),
+    [homepageStyleDeskBar]
+  );
 
   const clearSelectedFilter = (filterKey) => {
     let nextPatch = null;
@@ -500,25 +517,30 @@ const HomePage = () => {
 
   return (
     <Box>
-      <Paper
-        variant="outlined"
-        sx={{
-          p: 1.1,
-          mb: 1.2,
-          borderLeft: '4px solid',
-          borderColor: 'secondary.main',
-          bgcolor: 'background.paper'
-        }}
-      >
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={0.6}>
-          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.08em' }}>
-            STYLE DESK
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            New drops weekly • curated for compact browsing
-          </Typography>
-        </Stack>
-      </Paper>
+      {styleDeskBar.enabled ? (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.1,
+            mb: 1.2,
+            borderLeft: '4px solid',
+            borderColor: styleDeskBar.accentColor,
+            bgcolor: styleDeskBar.backgroundColor
+          }}
+        >
+          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={0.6}>
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 700, letterSpacing: '0.08em', color: styleDeskBar.titleColor }}
+            >
+              {styleDeskBar.title}
+            </Typography>
+            <Typography variant="caption" sx={{ color: styleDeskBar.subtitleColor }}>
+              {styleDeskBar.subtitle}
+            </Typography>
+          </Stack>
+        </Paper>
+      ) : null}
 
       <HomepageBannerSlider sliderSettings={homepageBannerSlider} />
 

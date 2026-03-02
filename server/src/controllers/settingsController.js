@@ -12,12 +12,22 @@ const defaultPaymentGatewaySettings = StoreSettings.defaultPaymentGatewaySetting
 const defaultShowOutOfStockProducts = StoreSettings.defaultShowOutOfStockProducts;
 const defaultAuthSecuritySettings = StoreSettings.defaultAuthSecuritySettings;
 const defaultHomepageBannerSlider = StoreSettings.defaultHomepageBannerSlider || { enabled: false, banners: [] };
+const defaultHomepageStyleDeskBar = StoreSettings.defaultHomepageStyleDeskBar || {
+  enabled: true,
+  title: 'STYLE DESK',
+  subtitle: 'New drops weekly • curated for compact browsing',
+  backgroundColor: '#ffffff',
+  accentColor: '#b54d66',
+  titleColor: '#1d2230',
+  subtitleColor: '#5e6472'
+};
 const hexColorPattern = /^#([0-9a-fA-F]{6})$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const cloneGatewayDefaults = () => JSON.parse(JSON.stringify(defaultPaymentGatewaySettings));
 const cloneAuthSecurityDefaults = () => JSON.parse(JSON.stringify(defaultAuthSecuritySettings));
 const cloneHomepageBannerSliderDefaults = () => JSON.parse(JSON.stringify(defaultHomepageBannerSlider));
+const cloneHomepageStyleDeskBarDefaults = () => JSON.parse(JSON.stringify(defaultHomepageStyleDeskBar));
 
 const normalizeThemeInput = (value = {}) => ({
   primaryColor: String(value.primaryColor || '').trim(),
@@ -122,6 +132,27 @@ const normalizeHomepageBannerSliderOutput = (value = {}) => {
         };
       })
       .filter(Boolean)
+  };
+};
+
+const normalizeStyleDeskColor = (value, fallback) => {
+  const normalized = String(value || '').trim();
+  if (!hexColorPattern.test(normalized)) {
+    return fallback;
+  }
+  return normalized;
+};
+
+const normalizeHomepageStyleDeskBarOutput = (value = {}) => {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : Boolean(defaultHomepageStyleDeskBar.enabled),
+    title: String(source.title || '').trim() || defaultHomepageStyleDeskBar.title,
+    subtitle: String(source.subtitle || '').trim() || defaultHomepageStyleDeskBar.subtitle,
+    backgroundColor: normalizeStyleDeskColor(source.backgroundColor, defaultHomepageStyleDeskBar.backgroundColor),
+    accentColor: normalizeStyleDeskColor(source.accentColor, defaultHomepageStyleDeskBar.accentColor),
+    titleColor: normalizeStyleDeskColor(source.titleColor, defaultHomepageStyleDeskBar.titleColor),
+    subtitleColor: normalizeStyleDeskColor(source.subtitleColor, defaultHomepageStyleDeskBar.subtitleColor)
   };
 };
 
@@ -431,6 +462,7 @@ const resolveResellerPublicSettings = (settings, resellerContext = null) => {
         ? resellerSettings.showOutOfStockProducts
         : normalizeShowOutOfStockProducts(settings.showOutOfStockProducts),
     theme: normalizeThemeOutput(resellerTheme || settings.theme),
+    homepageStyleDeskBar: normalizeHomepageStyleDeskBarOutput(settings.homepageStyleDeskBar || {}),
     homepageBannerSlider: normalizeHomepageBannerSliderOutput(
       resellerHomepageBannerSlider || settings.homepageBannerSlider || {}
     )
@@ -446,6 +478,7 @@ const buildResponse = (settings, resellerContext = null) => {
     footerText: resolvedPublicSettings.footerText,
     showOutOfStockProducts: resolvedPublicSettings.showOutOfStockProducts,
     theme: resolvedPublicSettings.theme,
+    homepageStyleDeskBar: resolvedPublicSettings.homepageStyleDeskBar,
     homepageBannerSlider: resolvedPublicSettings.homepageBannerSlider,
     authSecurity: normalizeAuthSecurityPublicOutput(settings.authSecurity || {}),
     reseller: reseller
@@ -505,6 +538,7 @@ const ensureSettings = async () => {
       theme: defaultThemeSettings,
       paymentGateways: defaultPaymentGatewaySettings,
       authSecurity: defaultAuthSecuritySettings,
+      homepageStyleDeskBar: cloneHomepageStyleDeskBarDefaults(),
       homepageBannerSlider: cloneHomepageBannerSliderDefaults()
     });
     await settings.save();
@@ -553,6 +587,21 @@ const ensureSettings = async () => {
   if (JSON.stringify(mergedAuthSecurity) !== JSON.stringify(settings.authSecurity || {})) {
     settings.authSecurity = mergedAuthSecurity;
     touched = true;
+  }
+
+  if (
+    !settings.homepageStyleDeskBar ||
+    typeof settings.homepageStyleDeskBar !== 'object' ||
+    Array.isArray(settings.homepageStyleDeskBar)
+  ) {
+    settings.homepageStyleDeskBar = cloneHomepageStyleDeskBarDefaults();
+    touched = true;
+  } else {
+    const mergedHomepageStyleDeskBar = normalizeHomepageStyleDeskBarOutput(settings.homepageStyleDeskBar || {});
+    if (JSON.stringify(mergedHomepageStyleDeskBar) !== JSON.stringify(settings.homepageStyleDeskBar || {})) {
+      settings.homepageStyleDeskBar = mergedHomepageStyleDeskBar;
+      touched = true;
+    }
   }
 
   if (
@@ -701,6 +750,48 @@ const sanitizeHomepageBannerSliderInput = async (value = {}) => {
     enabled: hasEnabled ? Boolean(source.enabled) : Boolean(defaultHomepageBannerSlider.enabled),
     banners: normalizedBanners
   };
+};
+
+const sanitizeHomepageStyleDeskBarInput = (value = {}, currentValue = {}) => {
+  const source = ensureObjectPayload(value, 'Homepage style desk bar');
+  const mergedCurrent = normalizeHomepageStyleDeskBarOutput(currentValue || {});
+  const next = {
+    ...mergedCurrent
+  };
+
+  if (Object.prototype.hasOwnProperty.call(source, 'enabled')) {
+    next.enabled = Boolean(source.enabled);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'title')) {
+    const nextTitle = trimWithLength(source.title || '', 'Style desk title', 80);
+    next.title = nextTitle || defaultHomepageStyleDeskBar.title;
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'subtitle')) {
+    const nextSubtitle = trimWithLength(source.subtitle || '', 'Style desk subtitle', 180);
+    next.subtitle = nextSubtitle || defaultHomepageStyleDeskBar.subtitle;
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'backgroundColor')) {
+    const nextBackgroundColor = trimWithLength(source.backgroundColor || '', 'Style desk background color', 7);
+    validateHex(nextBackgroundColor, 'Style desk background color');
+    next.backgroundColor = nextBackgroundColor;
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'accentColor')) {
+    const nextAccentColor = trimWithLength(source.accentColor || '', 'Style desk accent color', 7);
+    validateHex(nextAccentColor, 'Style desk accent color');
+    next.accentColor = nextAccentColor;
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'titleColor')) {
+    const nextTitleColor = trimWithLength(source.titleColor || '', 'Style desk title color', 7);
+    validateHex(nextTitleColor, 'Style desk title color');
+    next.titleColor = nextTitleColor;
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'subtitleColor')) {
+    const nextSubtitleColor = trimWithLength(source.subtitleColor || '', 'Style desk subtitle color', 7);
+    validateHex(nextSubtitleColor, 'Style desk subtitle color');
+    next.subtitleColor = nextSubtitleColor;
+  }
+
+  return normalizeHomepageStyleDeskBarOutput(next);
 };
 
 const applyPaymentGatewayUpdates = (currentSettings, payload) => {
@@ -1185,6 +1276,7 @@ const updateStoreSettings = async (req, res) => {
   const hasFooterText = Object.prototype.hasOwnProperty.call(req.body || {}, 'footerText');
   const hasShowOutOfStockProducts = Object.prototype.hasOwnProperty.call(req.body || {}, 'showOutOfStockProducts');
   const hasTheme = Object.prototype.hasOwnProperty.call(req.body || {}, 'theme');
+  const hasHomepageStyleDeskBar = Object.prototype.hasOwnProperty.call(req.body || {}, 'homepageStyleDeskBar');
   const hasHomepageBannerSlider = Object.prototype.hasOwnProperty.call(req.body || {}, 'homepageBannerSlider');
   const hasPaymentGateways = Object.prototype.hasOwnProperty.call(req.body || {}, 'paymentGateways');
   const hasAuthSecurity = Object.prototype.hasOwnProperty.call(req.body || {}, 'authSecurity');
@@ -1197,6 +1289,7 @@ const updateStoreSettings = async (req, res) => {
     !hasFooterText &&
     !hasShowOutOfStockProducts &&
     !hasTheme &&
+    !hasHomepageStyleDeskBar &&
     !hasHomepageBannerSlider &&
     !hasPaymentGateways &&
     !hasAuthSecurity
@@ -1211,6 +1304,9 @@ const updateStoreSettings = async (req, res) => {
   if (isResellerAdmin) {
     if (hasAuthSecurity) {
       return res.status(403).json({ message: 'Authentication security is managed by main admin' });
+    }
+    if (hasHomepageStyleDeskBar) {
+      return res.status(403).json({ message: 'Homepage style desk bar is managed by main admin' });
     }
     if (hasHomepageBannerSlider) {
       return res.status(403).json({ message: 'Homepage banner slider is managed by main admin' });
@@ -1340,6 +1436,17 @@ const updateStoreSettings = async (req, res) => {
       settings.theme = sanitizeTheme(req.body.theme || {});
     } catch (validationError) {
       return res.status(400).json({ message: validationError.message || 'Invalid theme settings' });
+    }
+  }
+
+  if (hasHomepageStyleDeskBar) {
+    try {
+      settings.homepageStyleDeskBar = sanitizeHomepageStyleDeskBarInput(
+        req.body.homepageStyleDeskBar || {},
+        settings.homepageStyleDeskBar || {}
+      );
+    } catch (styleDeskBarError) {
+      return res.status(400).json({ message: styleDeskBarError.message || 'Invalid homepage style desk bar settings' });
     }
   }
 

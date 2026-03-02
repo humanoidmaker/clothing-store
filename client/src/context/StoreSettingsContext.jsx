@@ -12,6 +12,15 @@ const defaultAuthSecuritySettings = {
     siteKey: ''
   }
 };
+const defaultHomepageStyleDeskBar = {
+  enabled: true,
+  title: 'STYLE DESK',
+  subtitle: 'New drops weekly • curated for compact browsing',
+  backgroundColor: '#ffffff',
+  accentColor: '#b54d66',
+  titleColor: '#1d2230',
+  subtitleColor: '#5e6472'
+};
 const defaultHomepageBannerSlider = {
   enabled: false,
   banners: []
@@ -19,6 +28,24 @@ const defaultHomepageBannerSlider = {
 
 const normalizeStoreName = (value) => String(value || '').trim() || defaultStoreName;
 const normalizeFooterText = (value) => String(value || '').trim() || defaultFooterText;
+const hexColorPattern = /^#([0-9a-fA-F]{6})$/;
+const normalizeHexColor = (value, fallback) => {
+  const normalized = String(value || '').trim();
+  if (!hexColorPattern.test(normalized)) return fallback;
+  return normalized;
+};
+const normalizeHomepageStyleDeskBar = (value = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : defaultHomepageStyleDeskBar.enabled,
+    title: String(source.title || '').trim() || defaultHomepageStyleDeskBar.title,
+    subtitle: String(source.subtitle || '').trim() || defaultHomepageStyleDeskBar.subtitle,
+    backgroundColor: normalizeHexColor(source.backgroundColor, defaultHomepageStyleDeskBar.backgroundColor),
+    accentColor: normalizeHexColor(source.accentColor, defaultHomepageStyleDeskBar.accentColor),
+    titleColor: normalizeHexColor(source.titleColor, defaultHomepageStyleDeskBar.titleColor),
+    subtitleColor: normalizeHexColor(source.subtitleColor, defaultHomepageStyleDeskBar.subtitleColor)
+  };
+};
 const normalizeBannerSlider = (value = {}) => {
   const source = value && typeof value === 'object' ? value : {};
   const banners = Array.isArray(source.banners) ? source.banners : [];
@@ -50,6 +77,7 @@ export const StoreSettingsProvider = ({ children }) => {
   const [showOutOfStockProducts, setShowOutOfStockProducts] = useState(defaultShowOutOfStockProducts);
   const [authSecuritySettings, setAuthSecuritySettings] = useState(defaultAuthSecuritySettings);
   const [themeSettings, setThemeSettings] = useState(defaultThemeSettings);
+  const [homepageStyleDeskBar, setHomepageStyleDeskBar] = useState(defaultHomepageStyleDeskBar);
   const [homepageBannerSlider, setHomepageBannerSlider] = useState(defaultHomepageBannerSlider);
   const [loading, setLoading] = useState(true);
 
@@ -67,6 +95,7 @@ export const StoreSettingsProvider = ({ children }) => {
       }
     };
     const nextThemeSettings = normalizeThemeSettings(data?.theme || {});
+    const nextHomepageStyleDeskBar = normalizeHomepageStyleDeskBar(data?.homepageStyleDeskBar || {});
     const nextHomepageBannerSlider = normalizeBannerSlider(data?.homepageBannerSlider || {});
 
     setStoreName(nextStoreName);
@@ -74,6 +103,7 @@ export const StoreSettingsProvider = ({ children }) => {
     setShowOutOfStockProducts(nextShowOutOfStockProducts);
     setAuthSecuritySettings(nextAuthSecuritySettings);
     setThemeSettings(nextThemeSettings);
+    setHomepageStyleDeskBar(nextHomepageStyleDeskBar);
     setHomepageBannerSlider(nextHomepageBannerSlider);
 
     return {
@@ -82,6 +112,7 @@ export const StoreSettingsProvider = ({ children }) => {
       showOutOfStockProducts: nextShowOutOfStockProducts,
       authSecurity: nextAuthSecuritySettings,
       theme: nextThemeSettings,
+      homepageStyleDeskBar: nextHomepageStyleDeskBar,
       homepageBannerSlider: nextHomepageBannerSlider
     };
   }, []);
@@ -100,6 +131,7 @@ export const StoreSettingsProvider = ({ children }) => {
         current && typeof current === 'object' ? current : defaultAuthSecuritySettings
       );
       setThemeSettings((current) => normalizeThemeSettings(current || defaultThemeSettings));
+      setHomepageStyleDeskBar((current) => normalizeHomepageStyleDeskBar(current || defaultHomepageStyleDeskBar));
       setHomepageBannerSlider((current) => normalizeBannerSlider(current || defaultHomepageBannerSlider));
     } finally {
       setLoading(false);
@@ -117,6 +149,7 @@ export const StoreSettingsProvider = ({ children }) => {
       showOutOfStockProducts: nextShowOutOfStockProducts,
       authSecurity: nextAuthSecurity,
       theme: nextTheme,
+      homepageStyleDeskBar: nextHomepageStyleDeskBar,
       homepageBannerSlider: nextHomepageBannerSlider
     } = {}) => {
       const payload = {};
@@ -139,6 +172,10 @@ export const StoreSettingsProvider = ({ children }) => {
 
       if (nextTheme !== undefined) {
         payload.theme = normalizeThemeSettings(nextTheme);
+      }
+
+      if (nextHomepageStyleDeskBar !== undefined) {
+        payload.homepageStyleDeskBar = normalizeHomepageStyleDeskBar(nextHomepageStyleDeskBar);
       }
 
       if (nextHomepageBannerSlider !== undefined) {
@@ -166,6 +203,7 @@ export const StoreSettingsProvider = ({ children }) => {
       showOutOfStockProducts,
       authSecuritySettings,
       themeSettings,
+      homepageStyleDeskBar,
       homepageBannerSlider,
       loading,
       refreshSettings,
@@ -178,6 +216,7 @@ export const StoreSettingsProvider = ({ children }) => {
       showOutOfStockProducts,
       authSecuritySettings,
       themeSettings,
+      homepageStyleDeskBar,
       homepageBannerSlider,
       loading,
       refreshSettings,

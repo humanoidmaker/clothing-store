@@ -90,14 +90,54 @@ const normalizeHomepageBannerSliderDraft = (value = {}) => {
   };
 };
 
+const defaultHomepageStyleDeskBarDraft = {
+  enabled: true,
+  title: 'STYLE DESK',
+  subtitle: 'New drops weekly • curated for compact browsing',
+  backgroundColor: '#ffffff',
+  accentColor: '#b54d66',
+  titleColor: '#1d2230',
+  subtitleColor: '#5e6472'
+};
+
+const homepageStyleDeskBarColorItems = [
+  { key: 'backgroundColor', label: 'Background Color' },
+  { key: 'accentColor', label: 'Accent Border Color' },
+  { key: 'titleColor', label: 'Title Color' },
+  { key: 'subtitleColor', label: 'Subtitle Color' }
+];
+
+const normalizeHomepageStyleDeskBarDraft = (value = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : defaultHomepageStyleDeskBarDraft.enabled,
+    title: String(source.title || '').trim() || defaultHomepageStyleDeskBarDraft.title,
+    subtitle: String(source.subtitle || '').trim() || defaultHomepageStyleDeskBarDraft.subtitle,
+    backgroundColor: String(source.backgroundColor || '').trim() || defaultHomepageStyleDeskBarDraft.backgroundColor,
+    accentColor: String(source.accentColor || '').trim() || defaultHomepageStyleDeskBarDraft.accentColor,
+    titleColor: String(source.titleColor || '').trim() || defaultHomepageStyleDeskBarDraft.titleColor,
+    subtitleColor: String(source.subtitleColor || '').trim() || defaultHomepageStyleDeskBarDraft.subtitleColor
+  };
+};
+
 const AdminSettingsPage = () => {
   const { isAdmin } = useAuth();
-  const { storeName, footerText, showOutOfStockProducts, themeSettings, homepageBannerSlider, updateStoreSettings } =
-    useStoreSettings();
+  const {
+    storeName,
+    footerText,
+    showOutOfStockProducts,
+    themeSettings,
+    homepageStyleDeskBar,
+    homepageBannerSlider,
+    updateStoreSettings
+  } = useStoreSettings();
   const [nameDraft, setNameDraft] = useState(storeName);
   const [footerTextDraft, setFooterTextDraft] = useState(footerText);
   const [showOutOfStockDraft, setShowOutOfStockDraft] = useState(showOutOfStockProducts);
   const [themeDraft, setThemeDraft] = useState(() => normalizeThemeSettings(themeSettings));
+  const [homepageStyleDeskBarDraft, setHomepageStyleDeskBarDraft] = useState(() =>
+    normalizeHomepageStyleDeskBarDraft(homepageStyleDeskBar)
+  );
   const [homepageBannerSliderDraft, setHomepageBannerSliderDraft] = useState(() =>
     normalizeHomepageBannerSliderDraft(homepageBannerSlider)
   );
@@ -111,8 +151,9 @@ const AdminSettingsPage = () => {
     setFooterTextDraft(footerText);
     setShowOutOfStockDraft(showOutOfStockProducts);
     setThemeDraft(normalizeThemeSettings(themeSettings));
+    setHomepageStyleDeskBarDraft(normalizeHomepageStyleDeskBarDraft(homepageStyleDeskBar));
     setHomepageBannerSliderDraft(normalizeHomepageBannerSliderDraft(homepageBannerSlider));
-  }, [storeName, footerText, showOutOfStockProducts, themeSettings, homepageBannerSlider]);
+  }, [storeName, footerText, showOutOfStockProducts, themeSettings, homepageStyleDeskBar, homepageBannerSlider]);
 
   const onThemeFieldChange = (field, value) => {
     setThemeDraft((current) => ({
@@ -123,6 +164,17 @@ const AdminSettingsPage = () => {
 
   const onResetTheme = () => {
     setThemeDraft(defaultThemeSettings);
+  };
+
+  const onStyleDeskBarFieldChange = (field, value) => {
+    setHomepageStyleDeskBarDraft((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const onResetStyleDeskBar = () => {
+    setHomepageStyleDeskBarDraft(defaultHomepageStyleDeskBarDraft);
   };
 
   const onAddBanner = () => {
@@ -218,11 +270,13 @@ const AdminSettingsPage = () => {
         theme: themeDraft
       };
       if (isAdmin) {
+        payload.homepageStyleDeskBar = homepageStyleDeskBarDraft;
         payload.homepageBannerSlider = homepageBannerSliderDraft;
       }
 
       const updatedSettings = await updateStoreSettings(payload);
       if (isAdmin) {
+        setHomepageStyleDeskBarDraft(normalizeHomepageStyleDeskBarDraft(updatedSettings.homepageStyleDeskBar));
         setHomepageBannerSliderDraft(normalizeHomepageBannerSliderDraft(updatedSettings.homepageBannerSlider));
       }
       setSuccess(`Settings updated. Store name: "${updatedSettings.storeName}"`);
@@ -243,7 +297,7 @@ const AdminSettingsPage = () => {
       <PageHeader
         eyebrow="Admin"
         title="Store Settings"
-        subtitle="Update branding, compact homepage banner slider, and full website theme."
+        subtitle="Update branding, style desk strip, compact homepage slider, and full website theme."
       />
 
       <Card sx={{ mb: 1.2 }}>
@@ -306,6 +360,65 @@ const AdminSettingsPage = () => {
 
             {isAdmin ? (
               <>
+                <Divider />
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={0.8}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Homepage Style Desk Bar
+                  </Typography>
+                  <Button type="button" size="small" variant="outlined" onClick={onResetStyleDeskBar}>
+                    Reset Bar
+                  </Button>
+                </Stack>
+
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={homepageStyleDeskBarDraft.enabled}
+                      onChange={(event) => onStyleDeskBarFieldChange('enabled', event.target.checked)}
+                    />
+                  }
+                  label="Show Style Desk strip above homepage products"
+                />
+
+                <Box sx={{ display: 'grid', gap: 0.9, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' } }}>
+                  <TextField
+                    size="small"
+                    label="Bar Title"
+                    value={homepageStyleDeskBarDraft.title}
+                    onChange={(event) => onStyleDeskBarFieldChange('title', event.target.value)}
+                    inputProps={{ maxLength: 80 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Bar Subtitle"
+                    value={homepageStyleDeskBarDraft.subtitle}
+                    onChange={(event) => onStyleDeskBarFieldChange('subtitle', event.target.value)}
+                    inputProps={{ maxLength: 180 }}
+                  />
+                </Box>
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 0.9,
+                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }
+                  }}
+                >
+                  {homepageStyleDeskBarColorItems.map((item) => (
+                    <TextField
+                      key={item.key}
+                      type="color"
+                      size="small"
+                      label={item.label}
+                      value={homepageStyleDeskBarDraft[item.key]}
+                      onChange={(event) => onStyleDeskBarFieldChange(item.key, event.target.value)}
+                      sx={colorInputSx}
+                      helperText={homepageStyleDeskBarDraft[item.key]}
+                    />
+                  ))}
+                </Box>
+
                 <Divider />
 
                 <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={0.8}>
