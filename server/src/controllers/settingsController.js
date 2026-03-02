@@ -399,13 +399,37 @@ const buildResponse = (settings, resellerContext = null) => {
   };
 };
 
-const buildAdminResponse = (settings) => ({
-  ...buildResponse(settings),
-  authSecurity: normalizeAuthSecurityOutput(normalizeAuthSecurityInput(settings.authSecurity || {})),
-  paymentGateways: normalizePaymentGatewaysOutput(
-    normalizePaymentGatewaysInput(settings.paymentGateways || {}, settings.razorpay || {})
-  )
-});
+const getResellerSettingsObject = (resellerContext = null) => {
+  const reseller = resellerContext?.reseller || null;
+  if (!reseller || !reseller.settings || typeof reseller.settings !== 'object' || Array.isArray(reseller.settings)) {
+    return null;
+  }
+  return reseller.settings;
+};
+
+const resolveScopedPaymentGatewaySettings = (settings, resellerContext = null) => {
+  const resellerSettings = getResellerSettingsObject(resellerContext);
+  const resellerPaymentGateways =
+    resellerSettings?.paymentGateways &&
+    typeof resellerSettings.paymentGateways === 'object' &&
+    !Array.isArray(resellerSettings.paymentGateways)
+      ? resellerSettings.paymentGateways
+      : null;
+  const isResellerScoped = Boolean(resellerSettings);
+  const sourceGateways = isResellerScoped ? resellerPaymentGateways || {} : settings.paymentGateways || {};
+  return normalizePaymentGatewaysInput(sourceGateways, settings.razorpay || {});
+};
+
+const buildAdminResponse = (settings, resellerContext = null, options = {}) => {
+  const isMainAdmin = options.isMainAdmin !== false;
+  return {
+    ...buildResponse(settings, resellerContext),
+    authSecurity: isMainAdmin
+      ? normalizeAuthSecurityOutput(normalizeAuthSecurityInput(settings.authSecurity || {}))
+      : normalizeAuthSecurityPublicOutput(settings.authSecurity || {}),
+    paymentGateways: normalizePaymentGatewaysOutput(resolveScopedPaymentGatewaySettings(settings, resellerContext))
+  };
+};
 
 const ensureSettings = async () => {
   let settings = await StoreSettings.findOne(SINGLETON_QUERY);
@@ -494,7 +518,25 @@ const getStoreSettings = async (req, res) => {
 
 const getAdminStoreSettings = async (req, res) => {
   const settings = await ensureSettings();
-  return res.json(buildAdminResponse(settings));
+  if (req.user?.isAdmin) {
+    return res.json(buildAdminResponse(settings, null, { isMainAdmin: true }));
+  }
+
+  const resellerId = String(req.user?.resellerId || '').trim();
+  if (!req.user?.isResellerAdmin || !resellerId) {
+    return res.status(403).json({ message: 'Admin or reseller access required' });
+  }
+
+  const resellerSettingsState = await getResellerSettingsById(resellerId);
+  if (!resellerSettingsState?.reseller) {
+    return res.status(404).json({ message: 'Reseller profile not found' });
+  }
+
+  const resellerContext = {
+    reseller: resellerSettingsState.reseller,
+    host: req.headers?.host || ''
+  };
+  return res.json(buildAdminResponse(settings, resellerContext, { isMainAdmin: false }));
 };
 
 const ensureObjectPayload = (value, label) => {
@@ -1009,11 +1051,12 @@ const updateStoreSettings = async (req, res) => {
   }
 
   if (isResellerAdmin) {
-    if (hasPaymentGateways || hasAuthSecurity) {
-      return res.status(403).json({ message: 'Payment gateways and authentication security are managed by main admin' });
+    if (hasAuthSecurity) {
+      return res.status(403).json({ message: 'Authentication security is managed by main admin' });
     }
 
     const resellerPatch = {};
+    let settingsForReseller = null;
 
     if (hasStoreName) {
       const nextStoreName = String(req.body.storeName || '').trim();
@@ -1052,9 +1095,39 @@ const updateStoreSettings = async (req, res) => {
       }
     }
 
+    if (hasPaymentGateways) {
+      try {
+        settingsForReseller = await ensureSettings();
+        const resellerSettingsState = await getResellerSettingsById(resellerId);
+        if (!resellerSettingsState?.reseller) {
+          return res.status(404).json({ message: 'Reseller profile not found' });
+        }
+
+        const currentResellerPaymentGateways =
+          resellerSettingsState.settings?.paymentGateways &&
+          typeof resellerSettingsState.settings.paymentGateways === 'object' &&
+          !Array.isArray(resellerSettingsState.settings.paymentGateways)
+            ? resellerSettingsState.settings.paymentGateways
+            : {};
+
+        resellerPatch.paymentGateways = applyPaymentGatewayUpdates(
+          {
+            paymentGateways: normalizePaymentGatewaysInput(
+              currentResellerPaymentGateways,
+              settingsForReseller.razorpay || {}
+            ),
+            razorpay: settingsForReseller.razorpay || {}
+          },
+          req.body.paymentGateways
+        );
+      } catch (gatewayError) {
+        return res.status(400).json({ message: gatewayError.message || 'Invalid payment gateway settings' });
+      }
+    }
+
     try {
       await updateResellerSettingsById(resellerId, resellerPatch);
-      const settings = await ensureSettings();
+      const settings = settingsForReseller || (await ensureSettings());
       const resellerSettingsState = await getResellerSettingsById(resellerId);
       const resellerContext = resellerSettingsState
         ? {
@@ -1062,7 +1135,7 @@ const updateStoreSettings = async (req, res) => {
             host: req.headers?.host || ''
           }
         : null;
-      return res.json(buildResponse(settings, resellerContext));
+      return res.json(buildAdminResponse(settings, resellerContext, { isMainAdmin: false }));
     } catch (error) {
       const normalizedMessage = String(error.message || '').trim().toLowerCase();
       const status = normalizedMessage.includes('not found') ? 404 : 400;

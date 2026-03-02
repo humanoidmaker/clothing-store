@@ -132,7 +132,7 @@ const AppShell = () => {
                           <Route
                             path="settings/payment-gateways"
                             element={(
-                              <ProtectedRoute adminOnly>
+                              <ProtectedRoute adminOrReseller>
                                 <AdminPaymentGatewaysPage />
                               </ProtectedRoute>
                             )}

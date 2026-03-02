@@ -517,16 +517,33 @@ const resolveManualInvoiceUser = async (payload = {}) => {
   return { user };
 };
 
-const getRazorpayClient = async () => {
+const getRazorpayClient = async (resellerContext = null) => {
   try {
     const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
-    const normalized = normalizeStoredGatewaySettings(settings || {});
+    const resellerSettings =
+      resellerContext?.reseller?.settings &&
+      typeof resellerContext.reseller.settings === 'object' &&
+      !Array.isArray(resellerContext.reseller.settings)
+        ? resellerContext.reseller.settings
+        : null;
+    const resellerGatewayOverrides =
+      resellerSettings?.paymentGateways &&
+      typeof resellerSettings.paymentGateways === 'object' &&
+      !Array.isArray(resellerSettings.paymentGateways)
+        ? resellerSettings.paymentGateways
+        : null;
+    const isResellerScoped = Boolean(resellerSettings);
+    const normalized = normalizeStoredGatewaySettings({
+      paymentGateways: isResellerScoped ? resellerGatewayOverrides || {} : settings?.paymentGateways || {},
+      razorpay: settings?.razorpay || {}
+    });
+    const scopeLabel = isResellerScoped ? 'reseller settings' : 'admin settings';
     const activeRazorpayConfig = normalized.razorpay.mode === 'live' ? normalized.razorpay.live : normalized.razorpay.test;
     const keyId = String(activeRazorpayConfig?.keyId || '').trim();
     const encryptedSecret = String(activeRazorpayConfig?.keySecretEncrypted || '').trim();
 
     if (!normalized.razorpay.enabled || !keyId || !encryptedSecret) {
-      return { error: { status: 500, message: 'Razorpay keys are not configured in admin settings' } };
+      return { error: { status: 500, message: `Razorpay keys are not configured in ${scopeLabel}` } };
     }
 
     let keySecret = '';
@@ -536,13 +553,13 @@ const getRazorpayClient = async () => {
       return {
         error: {
           status: 500,
-          message: decryptionError.message || 'Unable to decrypt Razorpay keys from store settings'
+          message: decryptionError.message || `Unable to decrypt Razorpay keys from ${scopeLabel}`
         }
       };
     }
 
     if (!keySecret) {
-      return { error: { status: 500, message: 'Razorpay keys are not configured in admin settings' } };
+      return { error: { status: 500, message: `Razorpay keys are not configured in ${scopeLabel}` } };
     }
 
     return {
@@ -655,8 +672,8 @@ const createManualInvoice = async (req, res) => {
 
 const createRazorpayOrder = async (req, res) => {
   const { items } = req.body;
-  const razorpay = await getRazorpayClient();
   const resellerContext = await resolveResellerContext(req);
+  const razorpay = await getRazorpayClient(resellerContext);
   const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
 
   if (razorpay.error) {
@@ -696,8 +713,8 @@ const createRazorpayOrder = async (req, res) => {
 
 const verifyRazorpayPaymentAndCreateOrder = async (req, res) => {
   const { items, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-  const razorpay = await getRazorpayClient();
   const resellerContext = await resolveResellerContext(req);
+  const razorpay = await getRazorpayClient(resellerContext);
   const effectiveResellerContext = shouldApplyResellerPricing(req, resellerContext?.reseller) ? resellerContext : null;
 
   if (razorpay.error) {
@@ -898,6 +915,29 @@ const normalizeStoredGatewaySettings = (settingsDoc = {}) => {
   return normalized;
 };
 
+const resolveScopedGatewaySettings = (settingsDoc = {}, resellerContext = null) => {
+  const resellerSettings =
+    resellerContext?.reseller?.settings &&
+    typeof resellerContext.reseller.settings === 'object' &&
+    !Array.isArray(resellerContext.reseller.settings)
+      ? resellerContext.reseller.settings
+      : null;
+  const resellerGatewayOverrides =
+    resellerSettings?.paymentGateways &&
+    typeof resellerSettings.paymentGateways === 'object' &&
+    !Array.isArray(resellerSettings.paymentGateways)
+      ? resellerSettings.paymentGateways
+      : null;
+  const isResellerScoped = Boolean(resellerSettings);
+
+  return {
+    normalized: normalizeStoredGatewaySettings({
+      paymentGateways: isResellerScoped ? resellerGatewayOverrides || {} : settingsDoc?.paymentGateways || {},
+      razorpay: settingsDoc?.razorpay || {}
+    })
+  };
+};
+
 const parseJsonSafely = async (response) => {
   const rawText = await response.text();
   try {
@@ -915,9 +955,9 @@ const decryptSecret = (encryptedValue) => {
   return decryptSettingValue(value);
 };
 
-const loadPaymentGatewayConfig = async () => {
+const loadPaymentGatewayConfig = async (resellerContext = null) => {
   const settings = await StoreSettings.findOne(SETTINGS_SINGLETON_QUERY).select('paymentGateways razorpay');
-  const normalized = normalizeStoredGatewaySettings(settings || {});
+  const { normalized } = resolveScopedGatewaySettings(settings || {}, resellerContext);
   const activeRazorpayConfig = normalized.razorpay.mode === 'live' ? normalized.razorpay.live : normalized.razorpay.test;
   const activeStripeConfig = normalized.stripe.mode === 'live' ? normalized.stripe.live : normalized.stripe.test;
 
@@ -983,9 +1023,10 @@ const resolveClientBaseUrl = (req) => {
 const resolveApiBaseUrl = (req) => `${req.protocol}://${req.get('host')}/api`;
 
 const getPaymentGatewayOptions = async (req, res) => {
+  const resellerContext = await resolveResellerContext(req);
   let config;
   try {
-    config = await loadPaymentGatewayConfig();
+    config = await loadPaymentGatewayConfig(resellerContext);
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Unable to load payment gateway settings' });
   }
@@ -1084,7 +1125,7 @@ const createPaymentIntent = async (req, res) => {
 
   let config;
   try {
-    config = await loadPaymentGatewayConfig();
+    config = await loadPaymentGatewayConfig(resellerContext);
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Unable to load payment gateway settings' });
   }
@@ -1427,7 +1468,7 @@ const verifyPaymentAndCreateOrder = async (req, res) => {
 
   let config;
   try {
-    config = await loadPaymentGatewayConfig();
+    config = await loadPaymentGatewayConfig(resellerContext);
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Unable to load payment gateway settings' });
   }

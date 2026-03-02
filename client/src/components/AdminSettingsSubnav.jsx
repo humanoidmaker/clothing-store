@@ -12,14 +12,14 @@ const subNavButtonSx = {
 };
 
 const AdminSettingsSubnav = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isResellerAdmin } = useAuth();
 
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8}>
       <Button component={NavLink} to="/admin/settings" end variant="outlined" sx={subNavButtonSx}>
         General Settings
       </Button>
-      {isAdmin ? (
+      {isAdmin || isResellerAdmin ? (
         <Button component={NavLink} to="/admin/settings/payment-gateways" variant="outlined" sx={subNavButtonSx}>
           Payment Gateways
         </Button>

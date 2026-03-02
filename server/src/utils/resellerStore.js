@@ -142,6 +142,10 @@ const normalizeThemeSettings = (value = {}) => {
 
 const normalizeResellerSettings = (value = {}, resellerName = '') => {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const paymentGateways =
+    source.paymentGateways && typeof source.paymentGateways === 'object' && !Array.isArray(source.paymentGateways)
+      ? clone(source.paymentGateways)
+      : null;
   return {
     storeName: String(source.storeName || '').trim() || String(resellerName || '').trim() || 'Clothing Store',
     footerText: String(source.footerText || '').trim() || defaultFooterText,
@@ -149,7 +153,8 @@ const normalizeResellerSettings = (value = {}, resellerName = '') => {
       typeof source.showOutOfStockProducts === 'boolean'
         ? source.showOutOfStockProducts
         : defaultShowOutOfStockProducts,
-    theme: normalizeThemeSettings(source.theme || {})
+    theme: normalizeThemeSettings(source.theme || {}),
+    paymentGateways
   };
 };
 
