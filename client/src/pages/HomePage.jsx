@@ -1,10 +1,14 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   FormControl,
   InputLabel,
@@ -13,8 +17,11 @@ import {
   Select,
   Slider,
   Stack,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import { useSearchParams } from 'react-router-dom';
@@ -63,6 +70,8 @@ const fallbackFilterOptions = {
 };
 
 const HomePage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +88,7 @@ const HomePage = () => {
     min: defaultPriceRange[0],
     max: defaultPriceRange[1]
   });
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const navbarSearch = useMemo(() => String(searchParams.get('q') || '').trim(), [searchParams]);
 
@@ -194,6 +204,7 @@ const HomePage = () => {
     const next = { ...filters, search: filters.search.trim() };
     setAppliedFilters(next);
     setPage(1);
+    if (isMobile) setMobileFiltersOpen(false);
 
     const nextParams = new URLSearchParams(searchParams);
     if (next.search) nextParams.set('q', next.search);
@@ -209,12 +220,280 @@ const HomePage = () => {
     setFilters(resetTo);
     setAppliedFilters(resetTo);
     setPage(1);
+    if (isMobile) setMobileFiltersOpen(false);
   };
 
   const onRowsPerPageChange = (nextRowsPerPage) => {
     setRowsPerPage(nextRowsPerPage);
     setPage(1);
   };
+
+  const clearSelectedFilter = (filterKey) => {
+    let nextPatch = null;
+
+    switch (filterKey) {
+      case 'search':
+        nextPatch = { search: '' };
+        break;
+      case 'category':
+        nextPatch = { category: 'All' };
+        break;
+      case 'gender':
+        nextPatch = { gender: 'All' };
+        break;
+      case 'brand':
+        nextPatch = { brand: 'All' };
+        break;
+      case 'material':
+        nextPatch = { material: 'All' };
+        break;
+      case 'fit':
+        nextPatch = { fit: 'All' };
+        break;
+      case 'size':
+        nextPatch = { size: '' };
+        break;
+      case 'color':
+        nextPatch = { color: '' };
+        break;
+      case 'availability':
+        nextPatch = { availability: 'all' };
+        break;
+      case 'price':
+        nextPatch = { priceRange: [priceBounds.min, priceBounds.max] };
+        break;
+      case 'sort':
+        nextPatch = { sort: 'newest' };
+        break;
+      default:
+        nextPatch = null;
+    }
+
+    if (!nextPatch) return;
+
+    if (filterKey === 'search') {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('q');
+      setSearchParams(nextParams, { replace: true });
+    }
+
+    setFilters((current) => ({ ...current, ...nextPatch }));
+    setAppliedFilters((current) => ({ ...current, ...nextPatch }));
+    setPage(1);
+    if (isMobile) setMobileFiltersOpen(false);
+  };
+
+  const selectedFilterChips = useMemo(() => {
+    const chips = [];
+    const sortLabel = sortOptions.find((option) => option.value === appliedFilters.sort)?.label || 'Newest First';
+
+    if (appliedFilters.search.trim()) chips.push({ key: 'search', label: `Search: ${appliedFilters.search.trim()}` });
+    if (appliedFilters.category !== 'All') chips.push({ key: 'category', label: `Category: ${appliedFilters.category}` });
+    if (appliedFilters.gender !== 'All') chips.push({ key: 'gender', label: `Gender: ${appliedFilters.gender}` });
+    if (appliedFilters.brand !== 'All') chips.push({ key: 'brand', label: `Brand: ${appliedFilters.brand}` });
+    if (appliedFilters.material !== 'All') chips.push({ key: 'material', label: `Material: ${appliedFilters.material}` });
+    if (appliedFilters.fit !== 'All') chips.push({ key: 'fit', label: `Fit: ${appliedFilters.fit}` });
+    if (appliedFilters.size) chips.push({ key: 'size', label: `Size: ${appliedFilters.size}` });
+    if (appliedFilters.color) chips.push({ key: 'color', label: `Color: ${appliedFilters.color}` });
+    if (appliedFilters.availability !== 'all') {
+      chips.push({
+        key: 'availability',
+        label: `Stock: ${appliedFilters.availability === 'in_stock' ? 'In Stock' : 'Out of Stock'}`
+      });
+    }
+
+    if (
+      appliedFilters.priceRange[0] !== priceBounds.min ||
+      appliedFilters.priceRange[1] !== priceBounds.max
+    ) {
+      chips.push({
+        key: 'price',
+        label: `Price: ${formatINR(appliedFilters.priceRange[0])} - ${formatINR(appliedFilters.priceRange[1])}`
+      });
+    }
+
+    if (appliedFilters.sort !== 'newest') chips.push({ key: 'sort', label: `Sort: ${sortLabel}` });
+
+    return chips;
+  }, [appliedFilters, priceBounds.max, priceBounds.min]);
+
+  const filterPanelContent = (
+    <Stack spacing={1.1}>
+      <FormControl size="small">
+        <InputLabel>Category</InputLabel>
+        <Select
+          value={filters.category}
+          label="Category"
+          onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
+        >
+          {filterOptions.categories.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Gender</InputLabel>
+        <Select
+          value={filters.gender}
+          label="Gender"
+          onChange={(event) => setFilters((current) => ({ ...current, gender: event.target.value }))}
+        >
+          {filterOptions.genders.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Brand</InputLabel>
+        <Select
+          value={filters.brand}
+          label="Brand"
+          onChange={(event) => setFilters((current) => ({ ...current, brand: event.target.value }))}
+        >
+          {filterOptions.brands.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Material</InputLabel>
+        <Select
+          value={filters.material}
+          label="Material"
+          onChange={(event) => setFilters((current) => ({ ...current, material: event.target.value }))}
+        >
+          {filterOptions.materials.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Fit</InputLabel>
+        <Select
+          value={filters.fit}
+          label="Fit"
+          onChange={(event) => setFilters((current) => ({ ...current, fit: event.target.value }))}
+        >
+          {filterOptions.fits.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Size</InputLabel>
+        <Select
+          value={filters.size}
+          label="Size"
+          onChange={(event) => setFilters((current) => ({ ...current, size: event.target.value }))}
+        >
+          <MenuItem value="">All Sizes</MenuItem>
+          {filterOptions.sizes.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Color</InputLabel>
+        <Select
+          value={filters.color}
+          label="Color"
+          onChange={(event) => setFilters((current) => ({ ...current, color: event.target.value }))}
+        >
+          <MenuItem value="">All Colors</MenuItem>
+          {filterOptions.colors.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl size="small">
+        <InputLabel>Stock</InputLabel>
+        <Select
+          value={filters.availability}
+          label="Stock"
+          onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value }))}
+        >
+          <MenuItem value="all">All</MenuItem>
+          <MenuItem value="in_stock">In Stock</MenuItem>
+          <MenuItem value="out_of_stock">Out of Stock</MenuItem>
+        </Select>
+      </FormControl>
+
+      <Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.6 }}>
+          Price: {formatINR(filters.priceRange[0])} - {formatINR(filters.priceRange[1])}
+        </Typography>
+        <Slider
+          value={filters.priceRange}
+          onChange={(event, nextValue) => {
+            if (!Array.isArray(nextValue)) return;
+            setFilters((current) => ({ ...current, priceRange: nextValue }));
+          }}
+          valueLabelDisplay="auto"
+          min={priceBounds.min}
+          max={priceBounds.max}
+          step={50}
+          size="small"
+        />
+      </Box>
+
+      <FormControl size="small">
+        <InputLabel>Sort</InputLabel>
+        <Select
+          value={filters.sort}
+          label="Sort"
+          onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value }))}
+        >
+          {sortOptions.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8}>
+        <Button
+          variant="contained"
+          onClick={applyFilters}
+          fullWidth
+          disabled={loading || loadingFilterOptions}
+          startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
+        >
+          {loading ? 'Applying...' : 'Apply'}
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<RestartAltOutlinedIcon fontSize="small" />}
+          onClick={resetFilters}
+          fullWidth
+          disabled={loading || loadingFilterOptions}
+        >
+          Reset
+        </Button>
+      </Stack>
+    </Stack>
+  );
 
   return (
     <Box>
@@ -261,190 +540,72 @@ const HomePage = () => {
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Card sx={{ position: { md: 'sticky' }, top: { md: 68 } }}>
-            <CardContent sx={{ p: 1.2 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.2 }}>
-                <Typography variant="subtitle1">Filters</Typography>
-                <TuneOutlinedIcon color="action" fontSize="small" />
-              </Stack>
+          {isMobile ? (
+            <>
+              <Accordion
+                expanded={mobileFiltersOpen}
+                onChange={(_event, expanded) => setMobileFiltersOpen(expanded)}
+                disableGutters
+                elevation={0}
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  '&:before': { display: 'none' }
+                }}
+              >
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Stack direction="row" spacing={0.8} alignItems="center">
+                    <TuneOutlinedIcon color="action" fontSize="small" />
+                    <Typography variant="subtitle2">Filters</Typography>
+                    {selectedFilterChips.length > 0 ? (
+                      <Chip size="small" color="secondary" label={selectedFilterChips.length} />
+                    ) : null}
+                  </Stack>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0.4 }}>{filterPanelContent}</AccordionDetails>
+              </Accordion>
 
-              <Stack spacing={1.1}>
-                <FormControl size="small">
-                  <InputLabel>Category</InputLabel>
-                  <Select
-                    value={filters.category}
-                    label="Category"
-                    onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
-                  >
-                    {filterOptions.categories.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Gender</InputLabel>
-                  <Select
-                    value={filters.gender}
-                    label="Gender"
-                    onChange={(event) => setFilters((current) => ({ ...current, gender: event.target.value }))}
-                  >
-                    {filterOptions.genders.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Brand</InputLabel>
-                  <Select
-                    value={filters.brand}
-                    label="Brand"
-                    onChange={(event) => setFilters((current) => ({ ...current, brand: event.target.value }))}
-                  >
-                    {filterOptions.brands.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Material</InputLabel>
-                  <Select
-                    value={filters.material}
-                    label="Material"
-                    onChange={(event) => setFilters((current) => ({ ...current, material: event.target.value }))}
-                  >
-                    {filterOptions.materials.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Fit</InputLabel>
-                  <Select
-                    value={filters.fit}
-                    label="Fit"
-                    onChange={(event) => setFilters((current) => ({ ...current, fit: event.target.value }))}
-                  >
-                    {filterOptions.fits.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Size</InputLabel>
-                  <Select
-                    value={filters.size}
-                    label="Size"
-                    onChange={(event) => setFilters((current) => ({ ...current, size: event.target.value }))}
-                  >
-                    <MenuItem value="">All Sizes</MenuItem>
-                    {filterOptions.sizes.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Color</InputLabel>
-                  <Select
-                    value={filters.color}
-                    label="Color"
-                    onChange={(event) => setFilters((current) => ({ ...current, color: event.target.value }))}
-                  >
-                    <MenuItem value="">All Colors</MenuItem>
-                    {filterOptions.colors.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl size="small">
-                  <InputLabel>Stock</InputLabel>
-                  <Select
-                    value={filters.availability}
-                    label="Stock"
-                    onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value }))}
-                  >
-                    <MenuItem value="all">All</MenuItem>
-                    <MenuItem value="in_stock">In Stock</MenuItem>
-                    <MenuItem value="out_of_stock">Out of Stock</MenuItem>
-                  </Select>
-                </FormControl>
-
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.6 }}>
-                    Price: {formatINR(filters.priceRange[0])} - {formatINR(filters.priceRange[1])}
-                  </Typography>
-                  <Slider
-                    value={filters.priceRange}
-                    onChange={(event, nextValue) => {
-                      if (!Array.isArray(nextValue)) return;
-                      setFilters((current) => ({ ...current, priceRange: nextValue }));
-                    }}
-                    valueLabelDisplay="auto"
-                    min={priceBounds.min}
-                    max={priceBounds.max}
-                    step={50}
-                    size="small"
-                  />
-                </Box>
-
-                <FormControl size="small">
-                  <InputLabel>Sort</InputLabel>
-                  <Select
-                    value={filters.sort}
-                    label="Sort"
-                    onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value }))}
-                  >
-                    {sortOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <Stack direction="row" spacing={0.8}>
-                  <Button
-                    variant="contained"
-                    onClick={applyFilters}
-                    fullWidth
-                    disabled={loading || loadingFilterOptions}
-                    startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
-                  >
-                    {loading ? 'Applying...' : 'Apply'}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<RestartAltOutlinedIcon fontSize="small" />}
-                    onClick={resetFilters}
-                    fullWidth
-                    disabled={loading || loadingFilterOptions}
-                  >
-                    Reset
-                  </Button>
+              {selectedFilterChips.length > 0 ? (
+                <Stack
+                  direction="row"
+                  spacing={0.7}
+                  useFlexGap
+                  flexWrap="wrap"
+                  sx={{
+                    mt: 0.9,
+                    p: 0.8,
+                    borderRadius: 1.5,
+                    border: '1px dashed',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper'
+                  }}
+                >
+                  {selectedFilterChips.map((chip) => (
+                    <Chip
+                      key={chip.key}
+                      size="small"
+                      label={chip.label}
+                      variant="outlined"
+                      onDelete={() => clearSelectedFilter(chip.key)}
+                    />
+                  ))}
                 </Stack>
-              </Stack>
-            </CardContent>
-          </Card>
+              ) : null}
+            </>
+          ) : (
+            <Card sx={{ position: { md: 'sticky' }, top: { md: 68 } }}>
+              <CardContent sx={{ p: 1.2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.2 }}>
+                  <Typography variant="subtitle1">Filters</Typography>
+                  <TuneOutlinedIcon color="action" fontSize="small" />
+                </Stack>
+
+                {filterPanelContent}
+              </CardContent>
+            </Card>
+          )}
         </Box>
 
         <Box sx={{ minWidth: 0 }}>
