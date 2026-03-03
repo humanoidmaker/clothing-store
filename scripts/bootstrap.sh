@@ -5,7 +5,7 @@ DEFAULT_REPO_URL="https://github.com/humanoidmaker/clothing-store.git"
 REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
 TARGET_DIR="${TARGET_DIR:-humanoidmaker_ecommerce}"
 BRANCH="${BRANCH:-}"
-RUN_SEED="${RUN_SEED:-0}"
+RUN_SEED="${RUN_SEED:-1}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 INSTALL_MONGODB="${INSTALL_MONGODB:-0}"
 
@@ -48,13 +48,14 @@ Options:
   --repo-url <url>      Git repository URL (default: ${DEFAULT_REPO_URL})
   --dir <path>          Target directory name (default: humanoidmaker_ecommerce)
   --branch <name>       Branch/tag to checkout (default: repository default branch)
-  --seed                Run seed command after setup
+  --seed                Run seed command after setup (default behavior)
+  --skip-seed           Skip seed command after setup
   --skip-build          Skip production build step
   --install-mongodb     Install and start local MongoDB server
   --help                Show this help
 
 Environment overrides:
-  REPO_URL, TARGET_DIR, BRANCH, RUN_SEED=1, SKIP_BUILD=1, INSTALL_MONGODB=1
+  REPO_URL, TARGET_DIR, BRANCH, RUN_SEED=0, SKIP_BUILD=1, INSTALL_MONGODB=1
 EOF
 }
 
@@ -77,6 +78,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --seed)
       RUN_SEED=1
+      shift
+      ;;
+    --skip-seed)
+      RUN_SEED=0
       shift
       ;;
     --skip-build)
@@ -172,6 +177,41 @@ mongodb_uri_is_local() {
 
 mongodb_port_open() {
   (echo >/dev/tcp/127.0.0.1/27017) >/dev/null 2>&1
+}
+
+prompt_yes_no() {
+  local question="$1"
+  local default="${2:-N}"
+  local answer prompt
+  local tty="/dev/tty"
+
+  if [[ ! -r "$tty" || ! -w "$tty" ]]; then
+    return 2
+  fi
+
+  if [[ "$default" == "Y" ]]; then
+    prompt="[Y/n]"
+  else
+    prompt="[y/N]"
+  fi
+
+  while true; do
+    printf "%s %s " "$question" "$prompt" >"$tty"
+    if ! IFS= read -r answer <"$tty"; then
+      return 2
+    fi
+
+    answer="${answer,,}"
+    if [[ -z "$answer" ]]; then
+      answer="${default,,}"
+    fi
+
+    case "$answer" in
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+      *) printf "Please answer y or n.\n" >"$tty" ;;
+    esac
+  done
 }
 
 install_mongodb_with_apt() {
@@ -436,10 +476,24 @@ main() {
   mkdir -p storage/media
   local mongo_uri
   mongo_uri="$(get_env_key ".env" "MONGO_URI")"
+  local should_install_mongodb=0
   if [[ "$INSTALL_MONGODB" == "1" ]]; then
-    ensure_mongodb
+    should_install_mongodb=1
   elif mongodb_uri_is_local "$mongo_uri" && ! mongodb_port_open; then
-    log_warn "Local MONGO_URI detected but MongoDB is not reachable. Re-run with --install-mongodb to install/start it."
+    if prompt_yes_no "Local MONGO_URI detected but MongoDB is not reachable on 127.0.0.1:27017. Install/start it now?" "N"; then
+      should_install_mongodb=1
+    else
+      local prompt_status=$?
+      if [[ "$prompt_status" -eq 2 ]]; then
+        log_warn "Local MONGO_URI detected but no interactive terminal is available. Re-run with --install-mongodb to install/start it."
+      else
+        log_warn "Skipping MongoDB installation/start. Ensure MONGO_URI points to an available MongoDB instance."
+      fi
+    fi
+  fi
+
+  if [[ "$should_install_mongodb" == "1" ]]; then
+    ensure_mongodb
   fi
   install_dependencies
   run_build

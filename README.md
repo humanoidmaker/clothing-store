@@ -65,7 +65,7 @@ Production-ready ecommerce platform with a Next.js host layer, React admin/store
 
 ## One-Line Server Setup (GitHub)
 
-These commands clone the full project from GitHub, install dependencies, create/update `.env` (with generated secrets), build the app, and print live step-by-step output.
+These commands clone the full project from GitHub, install dependencies, create/update `.env` (with generated secrets), build the app, seed sample data, and print live step-by-step output.
 
 Linux / Ubuntu:
 
@@ -93,8 +93,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create
 
 Optional flags:
 
-- Linux: `--dir myapp --branch master --seed --skip-build --install-mongodb`
-- Windows: `-TargetDir myapp -Branch master -Seed -SkipBuild -InstallMongoDb`
+- Linux: `--dir myapp --branch master --skip-seed --skip-build --install-mongodb`
+- Windows: `-TargetDir myapp -Branch master -SkipSeed -SkipBuild -InstallMongoDb`
 
 ## Environment Variables
 

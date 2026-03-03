@@ -4,6 +4,7 @@ param(
   [string]$TargetDir = "humanoidmaker_ecommerce",
   [string]$Branch = "",
   [switch]$Seed,
+  [switch]$SkipSeed,
   [switch]$SkipBuild,
   [switch]$InstallMongoDb
 )
@@ -251,6 +252,34 @@ function Test-LocalMongoUri {
   return $MongoUri -match '^mongodb(\+srv)?://([^/@]+@)?(localhost|127\.0\.0\.1|0\.0\.0\.0)([:/,]|$)'
 }
 
+function Prompt-InstallMongoDb {
+  param([bool]$Default = $false)
+
+  $suffix = if ($Default) { "[Y/n]" } else { "[y/N]" }
+  $prompt = "Local MONGO_URI detected but MongoDB is not reachable on 127.0.0.1:27017. Install/start it now? $suffix"
+
+  while ($true) {
+    try {
+      $answer = Read-Host $prompt
+    } catch {
+      Write-Warning "Interactive prompt unavailable. Re-run with -InstallMongoDb to install/start MongoDB."
+      return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+      return $Default
+    }
+
+    switch ($answer.Trim().ToLowerInvariant()) {
+      "y" { return $true }
+      "yes" { return $true }
+      "n" { return $false }
+      "no" { return $false }
+      default { Write-Warning "Please answer y or n." }
+    }
+  }
+}
+
 function Test-TcpPort {
   param(
     [string]$Host = "127.0.0.1",
@@ -453,7 +482,8 @@ function Build-App {
 }
 
 function Seed-AppData {
-  if (-not $Seed.IsPresent) {
+  if ($SkipSeed.IsPresent) {
+    Write-Info "Skipping seed (--SkipSeed)"
     return
   }
   Write-Step "Seeding sample data"
@@ -467,6 +497,9 @@ try {
   Write-Step "Starting bootstrap setup"
   Write-Info ("Repository: {0}" -f $RepoUrl)
   Write-Info ("Target dir: {0}" -f $TargetDir)
+  if ($Seed.IsPresent -and $SkipSeed.IsPresent) {
+    Fail "-Seed and -SkipSeed cannot be used together."
+  }
   if ($Branch) {
     Write-Info ("Branch: {0}" -f $Branch)
   }
@@ -481,11 +514,18 @@ try {
     $storagePath = Join-Path "storage" "media"
     New-Item -ItemType Directory -Path $storagePath -Force | Out-Null
     $mongoUri = Get-EnvValue -FilePath ".env" -Key "MONGO_URI"
+    $shouldEnsureMongoDb = $InstallMongoDb.IsPresent
 
-    if ($InstallMongoDb.IsPresent) {
+    if (-not $shouldEnsureMongoDb -and (Test-LocalMongoUri -MongoUri $mongoUri) -and -not (Test-TcpPort -Host "127.0.0.1" -Port 27017)) {
+      if (Prompt-InstallMongoDb) {
+        $shouldEnsureMongoDb = $true
+      } else {
+        Write-Warning "Skipping MongoDB installation/start. Ensure MONGO_URI points to an available MongoDB instance."
+      }
+    }
+
+    if ($shouldEnsureMongoDb) {
       Ensure-MongoDb
-    } elseif ((Test-LocalMongoUri -MongoUri $mongoUri) -and -not (Test-TcpPort -Host "127.0.0.1" -Port 27017)) {
-      Write-Warning "Local MONGO_URI detected but MongoDB is not reachable. Re-run with -InstallMongoDb to install/start it."
     }
 
     Install-Dependencies
