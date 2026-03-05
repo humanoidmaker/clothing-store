@@ -161,7 +161,7 @@ Change default credentials immediately in any non-local environment.
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE).
 
-Important legal summary: this software is provided "AS IS", without warranty of any kind, and the authors/contributors are not liable for any claim, damages, outages, data loss, security incidents, or other production/business impact from using this system.
+Important legal summary: this software is provided "AS IS", without warranty of any kind, and the authors/contributors are not liable for any claim, damages, outages, data loss, security incidents, or other production/business impact from using this system. 
 
 ## Contributing
 
